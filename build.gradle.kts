@@ -45,9 +45,14 @@ dependencies {
     // Kubernetes Health Probes
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-    // Lombok (Required for @Data, @Builder, etc. used in our models/DTOs)
+    // Object Mapping (MapStruct for high-performance compile-time mapping)
+    implementation("org.mapstruct:mapstruct:1.5.5.Final")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+
+    // Lombok (Required for @Data, @Builder, etc.) + MapStruct Binding
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
     // Testing
     testImplementation(platform("org.junit:junit-bom:5.10.0"))

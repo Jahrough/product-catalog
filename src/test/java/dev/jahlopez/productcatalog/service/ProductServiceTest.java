@@ -2,6 +2,7 @@ package dev.jahlopez.productcatalog.service;
 
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
+import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.Product;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -26,6 +27,9 @@ class ProductServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private ProductMapper productMapper;
+
     @InjectMocks
     private ProductService productService;
 
@@ -41,7 +45,17 @@ class ProductServiceTest {
                 .stockQuantity(100)
                 .build();
 
+        ProductResponseDto responseDto = ProductResponseDto.builder()
+                .id(1L)
+                .sku("PROD-HUB-001")
+                .name("USB-C Hub")
+                .description("Multiport adapter")
+                .price(BigDecimal.valueOf(49.99))
+                .stockQuantity(100)
+                .build();
+
         when(productRepository.findAll()).thenReturn(List.of(product));
+        when(productMapper.toResponseDto(product)).thenReturn(responseDto);
 
         // Act
         List<ProductResponseDto> products = productService.getAllProducts();
@@ -51,6 +65,7 @@ class ProductServiceTest {
         assertThat(products.get(0).getName()).isEqualTo("USB-C Hub");
         assertThat(products.get(0).getPrice()).isEqualByComparingTo(BigDecimal.valueOf(49.99));
         verify(productRepository, times(1)).findAll();
+        verify(productMapper, times(1)).toResponseDto(product);
     }
 
     @Test
@@ -64,7 +79,16 @@ class ProductServiceTest {
                 .stockQuantity(100)
                 .build();
 
+        ProductResponseDto responseDto = ProductResponseDto.builder()
+                .id(1L)
+                .sku("PROD-HUB-001")
+                .name("USB-C Hub")
+                .price(BigDecimal.valueOf(49.99))
+                .stockQuantity(100)
+                .build();
+
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productMapper.toResponseDto(product)).thenReturn(responseDto);
 
         // Act
         ProductResponseDto found = productService.getProductById(1L);
@@ -74,6 +98,7 @@ class ProductServiceTest {
         assertEquals(product.getId(), found.getId());
         assertThat(found.getName()).isEqualTo("USB-C Hub");
         verify(productRepository, times(1)).findById(1L);
+        verify(productMapper, times(1)).toResponseDto(product);
     }
 
     @Test
@@ -86,6 +111,7 @@ class ProductServiceTest {
             productService.getProductById(99L);
         });
         verify(productRepository, times(1)).findById(99L);
+        verifyNoInteractions(productMapper);
     }
 
     @Test
@@ -98,6 +124,14 @@ class ProductServiceTest {
         requestDto.setPrice(BigDecimal.valueOf(29.99));
         requestDto.setStockQuantity(40);
 
+        Product productToEntity = Product.builder()
+                .sku(requestDto.getSku())
+                .name(requestDto.getName())
+                .description(requestDto.getDescription())
+                .price(requestDto.getPrice())
+                .stockQuantity(requestDto.getStockQuantity())
+                .build();
+
         Product savedProduct = Product.builder()
                 .id(1L)
                 .sku(requestDto.getSku())
@@ -107,7 +141,18 @@ class ProductServiceTest {
                 .stockQuantity(requestDto.getStockQuantity())
                 .build();
 
+        ProductResponseDto responseDto = ProductResponseDto.builder()
+                .id(1L)
+                .sku(requestDto.getSku())
+                .name(requestDto.getName())
+                .description(requestDto.getDescription())
+                .price(requestDto.getPrice())
+                .stockQuantity(requestDto.getStockQuantity())
+                .build();
+
+        when(productMapper.toEntity(any(ProductRequestDto.class))).thenReturn(productToEntity);
         when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
+        when(productMapper.toResponseDto(savedProduct)).thenReturn(responseDto);
 
         // Act
         ProductResponseDto result = productService.createProduct(requestDto);
@@ -116,6 +161,8 @@ class ProductServiceTest {
         assertThat(result.getId()).isNotNull();
         assertThat(result.getName()).isEqualTo("Wireless Charger");
         assertThat(result.getPrice()).isEqualByComparingTo(BigDecimal.valueOf(29.99));
+        verify(productMapper, times(1)).toEntity(any(ProductRequestDto.class));
         verify(productRepository, times(1)).save(any(Product.class));
+        verify(productMapper, times(1)).toResponseDto(savedProduct);
     }
 }

@@ -2,6 +2,7 @@ package dev.jahlopez.productcatalog.service;
 
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
+import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.Product;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -19,20 +20,14 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductMapper productMapper;
 
     @Transactional
     @CacheEvict(value = {"products", "productsList"}, allEntries = true)
     public ProductResponseDto createProduct(ProductRequestDto requestDto) {
-        Product product = Product.builder()
-                .sku(requestDto.getSku())
-                .name(requestDto.getName())
-                .description(requestDto.getDescription())
-                .price(requestDto.getPrice())
-                .stockQuantity(requestDto.getStockQuantity())
-                .build();
-
+        Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
-        return mapToResponseDto(savedProduct);
+        return productMapper.toResponseDto(savedProduct);
     }
 
     @Transactional(readOnly = true)
@@ -40,7 +35,7 @@ public class ProductService {
     public ProductResponseDto getProductById(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
-        return mapToResponseDto(product);
+        return productMapper.toResponseDto(product);
     }
 
     @Transactional(readOnly = true)
@@ -48,14 +43,14 @@ public class ProductService {
     public ProductResponseDto getProductBySku(String sku) {
         Product product = productRepository.findBySku(sku)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found with SKU: " + sku));
-        return mapToResponseDto(product);
+        return productMapper.toResponseDto(product);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "productsList")
     public List<ProductResponseDto> getAllProducts() {
         return productRepository.findAll().stream()
-                .map(this::mapToResponseDto)
+                .map(productMapper::toResponseDto)
                 .collect(Collectors.toList());
     }
 
@@ -68,14 +63,4 @@ public class ProductService {
         productRepository.deleteById(id);
     }
 
-    private ProductResponseDto mapToResponseDto(Product product) {
-        return ProductResponseDto.builder()
-                .id(product.getId())
-                .sku(product.getSku())
-                .name(product.getName())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .stockQuantity(product.getStockQuantity())
-                .build();
-    }
 }
