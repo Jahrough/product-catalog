@@ -19,6 +19,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * REST controller exposing production-grade endpoints for managing the product catalog.
+ * Implements full OpenAPI 3 documentation, request validation, and standardized error responses.
+ */
 @RestController
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
@@ -130,7 +134,11 @@ public class ProductController {
             description = "Removes a product record from the database by its primary key and evicts all associated product and list caches."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Product deleted successfully (No Content)", content = @Content),
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Product deleted successfully (No Content)",
+                    content = @Content
+            ),
             @ApiResponse(
                     responseCode = "404",
                     description = "Product not found with the specified ID",
