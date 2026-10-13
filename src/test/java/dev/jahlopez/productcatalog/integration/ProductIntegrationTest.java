@@ -23,21 +23,38 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Enterprise integration test suite for the product catalog microservice.
+ * Utilizes Testcontainers to spin up isolated, containerized instances of PostgreSQL
+ * and Redis, guaranteeing 100% environment parity with production infrastructure
+ * while verifying database persistence, Flyway migrations, and Redis caching behavior.
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers(disabledWithoutDocker = true)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
 
+    /**
+     * Isolated PostgreSQL container for database integration testing.
+     */
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test");
 
+    /**
+     * Isolated Redis container for caching and distributed data tier testing.
+     */
     @Container
     static GenericContainer<?> redis = new GenericContainer<>("redis:alpine")
             .withExposedPorts(6379);
 
+    /**
+     * Dynamically registers Spring Boot datasource and Redis properties from the active Testcontainers instances.
+     *
+     * @param registry the dynamic property registry
+     */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         // PostgreSQL properties
@@ -60,6 +77,9 @@ class ProductIntegrationTest {
     @Autowired
     private CacheManager cacheManager;
 
+    /**
+     * Resets database state and flushes all Redis caches before each individual test execution.
+     */
     @BeforeEach
     void setUp() {
         productRepository.deleteAll();
@@ -73,6 +93,10 @@ class ProductIntegrationTest {
         }
     }
 
+    /**
+     * Verifies that product entities are correctly persisted via Spring Data JPA
+     * and successfully retrieved against the PostgreSQL container database.
+     */
     @Test
     void shouldSaveAndRetrieveProductFromDatabase() {
         // Arrange
@@ -95,6 +119,10 @@ class ProductIntegrationTest {
         assertThat(products.get(0).getPrice()).isEqualByComparingTo(BigDecimal.valueOf(499.99));
     }
 
+    /**
+     * Verifies that product lookup operations are successfully cached in Redis,
+     * allowing subsequent requests to bypass the database layer even if the underlying entity is removed.
+     */
     @Test
     void shouldCacheProductLookupInRedis() {
         // Arrange

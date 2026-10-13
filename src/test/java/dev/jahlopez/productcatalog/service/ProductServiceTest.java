@@ -21,6 +21,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+/**
+ * Unit test suite for {@link ProductService}.
+ * Utilizes Mockito to isolate business logic execution from underlying persistence and database layers,
+ * verifying correct orchestration of data mapping, repository calls, and exception handling.
+ */
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
@@ -33,6 +38,9 @@ class ProductServiceTest {
     @InjectMocks
     private ProductService productService;
 
+    /**
+     * Verifies that fetching all products returns a correctly mapped list of response DTOs.
+     */
     @Test
     void getAllProducts_ShouldReturnListOfProducts() {
         // Arrange
@@ -68,6 +76,9 @@ class ProductServiceTest {
         verify(productMapper, times(1)).toResponseDto(product);
     }
 
+    /**
+     * Verifies that retrieving a product by ID when it exists returns the corresponding response DTO.
+     */
     @Test
     void getProductById_WhenProductExists_ShouldReturnProduct() {
         // Arrange
@@ -101,6 +112,9 @@ class ProductServiceTest {
         verify(productMapper, times(1)).toResponseDto(product);
     }
 
+    /**
+     * Verifies that attempting to retrieve a non-existent product by ID throws an {@link EntityNotFoundException}.
+     */
     @Test
     void getProductById_WhenProductNotFound_ShouldThrowException() {
         // Arrange
@@ -114,6 +128,10 @@ class ProductServiceTest {
         verifyNoInteractions(productMapper);
     }
 
+    /**
+     * Verifies that creating a new product maps the request DTO to an entity, saves it via the repository,
+     * and returns the populated response DTO.
+     */
     @Test
     void createProduct_ShouldSaveAndReturnProduct() {
         // Arrange

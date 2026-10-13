@@ -22,6 +22,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Web layer slice test class for {@link ProductController}.
+ * Utilizes Spring Boot's {@link WebMvcTest} to test controller endpoints, request validation,
+ * HTTP status codes, and JSON serialization/deserialization with mocked business logic services.
+ */
 @WebMvcTest(ProductController.class)
 class ProductControllerTest {
 
@@ -34,6 +39,9 @@ class ProductControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    /**
+     * Verifies that GET /api/v1/products returns a 200 OK status along with a list of product DTOs.
+     */
     @Test
     void getAllProducts_ShouldReturnListOfProducts() throws Exception {
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -55,6 +63,9 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$[0].price").value(149.99));
     }
 
+    /**
+     * Verifies that GET /api/v1/products/{id} returns a 200 OK status and the matching product DTO when found.
+     */
     @Test
     void getProductById_WhenFound_ShouldReturnProduct() throws Exception {
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -75,6 +86,9 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.name").value("Mechanical Keyboard"));
     }
 
+    /**
+     * Verifies that GET /api/v1/products/{id} returns a 404 Not Found error response when the product ID does not exist.
+     */
     @Test
     void getProductById_WhenNotFound_ShouldReturn404() throws Exception {
         when(productService.getProductById(99L)).thenThrow(new EntityNotFoundException("Product not found with id: 99"));
@@ -85,6 +99,9 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.error").value("Not Found"));
     }
 
+    /**
+     * Verifies that POST /api/v1/products with valid payload data successfully creates a product and returns 201 Created.
+     */
     @Test
     void createProduct_WithValidData_ShouldReturnCreated() throws Exception {
         ProductRequestDto requestDto = new ProductRequestDto();
@@ -115,6 +132,10 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.price").value(79.99));
     }
 
+    /**
+     * Verifies that POST /api/v1/products with invalid payload data (blank fields, negative price)
+     * triggers validation constraints and returns a 400 Bad Request error response.
+     */
     @Test
     void createProduct_WithInvalidData_ShouldReturnBadRequest() throws Exception {
         ProductRequestDto requestDto = new ProductRequestDto();
