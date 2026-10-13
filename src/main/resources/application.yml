@@ -15,7 +15,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 2000m
+      timeout: 2000ms # Corrected time unit from '2000m' to '2000ms'
 
   jpa:
     hibernate:
@@ -29,6 +29,15 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+
+# SpringDoc OpenAPI / Swagger UI Configuration for OpenApiConfig integration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
 
 management:
   endpoints:

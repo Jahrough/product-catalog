@@ -43,7 +43,7 @@ public class ProductService {
 
     /**
      * Retrieves product details by its unique primary key ID.
-     * Leverages Redis caching (`products` cache) for high-performance read throughput.
+     * Leverages Redis caching ('products' cache tier) for high-performance read throughput.
      *
      * @param id the database primary key identifier
      * @return the product response DTO
@@ -59,7 +59,7 @@ public class ProductService {
 
     /**
      * Retrieves product details by its unique Stock Keeping Unit (SKU).
-     * Leverages Redis caching (`products` cache) for low-latency lookups.
+     * Leverages Redis caching ('products' cache tier) for low-latency lookups.
      *
      * @param sku the unique product SKU identifier
      * @return the product response DTO

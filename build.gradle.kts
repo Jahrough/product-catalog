@@ -62,6 +62,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
+    testImplementation("com.redis:testcontainers-redis:1.6.4") // Optional: dedicated Testcontainers Redis module
 }
 
 tasks.test {

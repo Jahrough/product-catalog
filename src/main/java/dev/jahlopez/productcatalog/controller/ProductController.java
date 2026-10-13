@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ import java.util.List;
 /**
  * REST controller exposing production-grade endpoints for managing the product catalog.
  * Implements clean OpenAPI 3 documentation via custom meta-annotations, request validation,
- * and standardized error responses.
+ * standardized error responses, and global security requirements.
  */
 @RestController
 @RequestMapping("/api/v1/products")
@@ -31,6 +32,7 @@ import java.util.List;
         name = "Product Catalog API",
         description = "High-performance microservice endpoints for managing product catalog data, pricing, inventory, and SKU lookups."
 )
+@SecurityRequirement(name = "BearerAuth") // Binds the OpenApiConfig JWT security scheme to controller endpoints
 public class ProductController {
 
     private final ProductService productService;

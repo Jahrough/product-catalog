@@ -20,8 +20,9 @@ spring:
   data:
     redis:
       # Default host and port bindings for local or containerized Redis test instances
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms # Added timeout guard for test execution robustness
 
 logging:
   level:
