@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -38,16 +39,16 @@ class ProductIntegrationTest {
      * Isolated PostgreSQL container for database integration testing.
      */
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
+    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
+                    .withDatabaseName("testdb")
+                    .withUsername("test")
+                    .withPassword("test");
 
     /**
      * Isolated Redis container for caching and distributed data tier testing.
      */
     @Container
-    static GenericContainer<?> redis = new GenericContainer<>("redis:alpine")
+    static final GenericContainer<?> redis = new GenericContainer<>("redis:alpine")
             .withExposedPorts(6379);
 
     /**
@@ -61,7 +62,7 @@ class ProductIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.flyway.enabled", () -> "true");
+        registry.add("spring.flyway.enabled", () -> true);
 
         // Redis properties dynamically mapped from Testcontainer
         registry.add("spring.data.redis.host", redis::getHost);
@@ -83,13 +84,12 @@ class ProductIntegrationTest {
     @BeforeEach
     void setUp() {
         productRepository.deleteAll();
-        // Clear all caches between test runs
-        if (cacheManager.getCacheNames() != null) {
-            cacheManager.getCacheNames().forEach(cacheName -> {
-                if (cacheManager.getCache(cacheName) != null) {
-                    cacheManager.getCache(cacheName).clear();
-                }
-            });
+
+        for (String cacheName : cacheManager.getCacheNames()) {
+            Cache cache = cacheManager.getCache(cacheName);
+            if (cache != null) {
+                cache.clear();
+            }
         }
     }
 
@@ -109,12 +109,16 @@ class ProductIntegrationTest {
                 .build();
 
         // Act
-        Product savedProduct = productRepository.save(product);
+        Product savedProduct = productRepository.saveAndFlush(product);
         List<Product> products = productRepository.findAll();
 
         // Assert
         assertThat(savedProduct.getId()).isNotNull();
+        assertThat(savedProduct.getCreatedAt()).isNotNull();
+        assertThat(savedProduct.getUpdatedAt()).isNotNull();
+
         assertThat(products).hasSize(1);
+        assertThat(products.get(0).getSku()).isEqualTo("PROD-MON-34");
         assertThat(products.get(0).getName()).isEqualTo("Ultrawide Monitor");
         assertThat(products.get(0).getPrice()).isEqualByComparingTo(BigDecimal.valueOf(499.99));
     }
@@ -138,14 +142,21 @@ class ProductIntegrationTest {
         // Act - First call should hit the database and populate cache
         ProductResponseDto fetchedFirst = productService.getProductById(created.getId());
 
-        // Delete from database directly to verify subsequent fetch comes from Redis cache
+        assertThat(fetchedFirst).isNotNull();
+        assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
+
+        // Delete the database record and flush the deletion.
         productRepository.deleteById(created.getId());
+        productRepository.flush();
+
+        assertThat(productRepository.findById(created.getId())).isEmpty();
 
         // Act - Second call should retrieve from Redis cache, bypassing the empty database table
         ProductResponseDto fetchedFromCache = productService.getProductById(created.getId());
 
         // Assert
         assertThat(fetchedFromCache).isNotNull();
+        assertThat(fetchedFromCache.getId()).isEqualTo(created.getId());
         assertThat(fetchedFromCache.getSku()).isEqualTo("PROD-KEY-01");
         assertThat(fetchedFromCache.getName()).isEqualTo("Mechanical Keyboard");
     }
