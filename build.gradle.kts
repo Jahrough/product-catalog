@@ -63,7 +63,8 @@ dependencies {
     // Testing: In-Memory Database
     testImplementation("com.h2database:h2")
 
-    // Integration Testing: Testcontainers
+    // Integration Testing: Testcontainers (Fixed with Platform BOM & Explicit Versions)
+    testImplementation(platform("org.testcontainers:testcontainers-bom:1.19.8"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("com.redis:testcontainers-redis:2.2.4")
