@@ -1,5 +1,6 @@
 package dev.jahlopez.productcatalog.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -28,28 +29,31 @@ public class RedisCacheConfig {
      * and GenericJackson2JsonRedisSerializer for cache values to support
      * JSON serialization and deserialization of cached Java objects.
      *
+     * @param objectMapper Spring Boot's configured Jackson ObjectMapper
      * @return the default Redis cache configuration
      */
     @Bean
-    RedisCacheConfiguration redisCacheConfiguration() {
+    RedisCacheConfiguration redisCacheConfiguration(
+            ObjectMapper objectMapper
+    ) {
+        GenericJackson2JsonRedisSerializer valueSerializer =
+                new GenericJackson2JsonRedisSerializer(objectMapper.copy());
+
         return RedisCacheConfiguration.defaultCacheConfig()
                 // Serialize cache keys as strings instead of binary data.
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair
                                 .fromSerializer(new StringRedisSerializer())
                 )
-                // Serialize cached objects as JSON.
+                // Serialize cached objects as JSON with type information.
                 .serializeValuesWith(
                         RedisSerializationContext.SerializationPair
-                                .fromSerializer(
-                                        new GenericJackson2JsonRedisSerializer()
-                                )
+                                .fromSerializer(valueSerializer)
                 );
     }
 
     /**
-     * Creates the Redis-backed cache manager used by Spring's caching
-     * abstraction.
+     * Creates the Redis-backed Spring Cache manager.
      *
      * The connection factory provides access to the configured Redis server.
      * The supplied cache configuration ensures cache entries use the
