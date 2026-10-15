@@ -1,3 +1,4 @@
+
 package dev.jahlopez.productcatalog.integration;
 
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
@@ -48,7 +49,7 @@ class ProductIntegrationTest {
      * Isolated Redis container for caching and distributed data tier testing.
      */
     @Container
-    static final GenericContainer<?> redis = new GenericContainer<>("redis:alpine")
+    static final GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379);
 
     /**
@@ -84,6 +85,7 @@ class ProductIntegrationTest {
     @BeforeEach
     void setUp() {
         productRepository.deleteAll();
+        productRepository.flush();
 
         for (String cacheName : cacheManager.getCacheNames()) {
             Cache cache = cacheManager.getCache(cacheName);
@@ -104,7 +106,7 @@ class ProductIntegrationTest {
                 .sku("PROD-MON-34")
                 .name("Ultrawide Monitor")
                 .description("34-inch curved gaming monitor")
-                .price(BigDecimal.valueOf(499.99))
+                .price(new BigDecimal("499.99"))
                 .stockQuantity(15)
                 .build();
 
@@ -120,7 +122,7 @@ class ProductIntegrationTest {
         assertThat(products).hasSize(1);
         assertThat(products.get(0).getSku()).isEqualTo("PROD-MON-34");
         assertThat(products.get(0).getName()).isEqualTo("Ultrawide Monitor");
-        assertThat(products.get(0).getPrice()).isEqualByComparingTo(BigDecimal.valueOf(499.99));
+        assertThat(products.get(0).getPrice()).isEqualByComparingTo(new BigDecimal("499.99"));
     }
 
     /**
@@ -134,7 +136,7 @@ class ProductIntegrationTest {
         requestDto.setSku("PROD-KEY-01");
         requestDto.setName("Mechanical Keyboard");
         requestDto.setDescription("Wireless RGB keyboard");
-        requestDto.setPrice(BigDecimal.valueOf(129.99));
+        requestDto.setPrice(new BigDecimal("129.99"));
         requestDto.setStockQuantity(50);
 
         ProductResponseDto created = productService.createProduct(requestDto);
@@ -143,6 +145,7 @@ class ProductIntegrationTest {
         ProductResponseDto fetchedFirst = productService.getProductById(created.getId());
 
         assertThat(fetchedFirst).isNotNull();
+        assertThat(fetchedFirst.getId()).isEqualTo(created.getId());
         assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
 
         // Delete the database record and flush the deletion.
