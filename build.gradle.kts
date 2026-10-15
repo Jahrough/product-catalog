@@ -9,7 +9,7 @@ version = "1.0-SNAPSHOT"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion.set(JavaLanguageVersion.of(21))
     }
 }
 
@@ -18,51 +18,55 @@ repositories {
 }
 
 dependencies {
-    // Force a secure version of commons-lang3 to remediate CVE-2025-48924
+    // Security Overrides
     constraints {
         implementation("org.apache.commons:commons-lang3:3.18.0") {
             because("Remediate CVE-2025-48924 transitive vulnerability")
         }
     }
 
-    // Spring Boot Core Web & Database Starters
+    // Spring Boot: Web, Persistence, and Validation
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     runtimeOnly("org.postgresql:postgresql")
 
-    // Database Migrations (Flyway)
+    // Database Migrations: Flyway
     implementation("org.flywaydb:flyway-core:10.17.0")
     implementation("org.flywaydb:flyway-database-postgresql:10.17.0")
 
-    // API Documentation (Swagger / OpenAPI 3)
+    // API Documentation: OpenAPI / Swagger UI
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 
-    // Caching (Redis for high-traffic product catalog reads)
+    // Caching: Redis
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // Kubernetes Health Probes
+    // Monitoring and Kubernetes Health Probes
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-    // Object Mapping (MapStruct for high-performance compile-time mapping)
+    // Object Mapping: MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
 
-    // Lombok (Required for @Data, @Builder, etc.) + MapStruct Binding
+    // Boilerplate Reduction: Lombok and MapStruct Binding
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
-    // Testing
+    // Testing: JUnit 5 and Spring Boot
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("com.h2database:h2")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+
+    // Testing: In-Memory Database
+    testImplementation("com.h2database:h2")
+
+    // Integration Testing: Testcontainers
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
-    testImplementation("com.redis:testcontainers-redis:1.6.4") // Optional: dedicated Testcontainers Redis module
+    testImplementation("com.redis:testcontainers-redis:2.2.4")
 }
 
 tasks.test {
