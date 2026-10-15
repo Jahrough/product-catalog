@@ -50,7 +50,7 @@ class ProductIntegrationTest {
      */
     @Container
     static final GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
-            .withExposedPorts(6379);
+                    .withExposedPorts(6379);
 
     /**
      * Dynamically registers Spring Boot datasource and Redis properties from the active Testcontainers instances.
@@ -59,7 +59,6 @@ class ProductIntegrationTest {
      */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL properties
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
@@ -101,7 +100,6 @@ class ProductIntegrationTest {
      */
     @Test
     void shouldSaveAndRetrieveProductFromDatabase() {
-        // Arrange
         Product product = Product.builder()
                 .sku("PROD-MON-34")
                 .name("Ultrawide Monitor")
@@ -110,11 +108,9 @@ class ProductIntegrationTest {
                 .stockQuantity(15)
                 .build();
 
-        // Act
         Product savedProduct = productRepository.saveAndFlush(product);
         List<Product> products = productRepository.findAll();
 
-        // Assert
         assertThat(savedProduct.getId()).isNotNull();
         assertThat(savedProduct.getCreatedAt()).isNotNull();
         assertThat(savedProduct.getUpdatedAt()).isNotNull();
@@ -131,7 +127,6 @@ class ProductIntegrationTest {
      */
     @Test
     void shouldCacheProductLookupInRedis() {
-        // Arrange
         ProductRequestDto requestDto = new ProductRequestDto();
         requestDto.setSku("PROD-KEY-01");
         requestDto.setName("Mechanical Keyboard");
@@ -141,26 +136,42 @@ class ProductIntegrationTest {
 
         ProductResponseDto created = productService.createProduct(requestDto);
 
-        // Act - First call should hit the database and populate cache
+        // First lookup loads the product and should populate the cache.
         ProductResponseDto fetchedFirst = productService.getProductById(created.getId());
 
         assertThat(fetchedFirst).isNotNull();
         assertThat(fetchedFirst.getId()).isEqualTo(created.getId());
         assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
 
-        // Delete the database record and flush the deletion.
+        // Confirm that a cache entry exists without assuming its serialized type.
+        Cache productCache = findCacheContaining(created.getId());
+        assertThat(productCache).as("Product lookup cache").isNotNull();
+        assertThat(productCache.get(created.getId()))
+                .as("Cached product entry")
+                .isNotNull();
+
+        // Delete the database row but preserve the cache entry.
         productRepository.deleteById(created.getId());
         productRepository.flush();
 
         assertThat(productRepository.findById(created.getId())).isEmpty();
 
-        // Act - Second call should retrieve from Redis cache, bypassing the empty database table
+        // A successful result here demonstrates that the service can use its cache.
         ProductResponseDto fetchedFromCache = productService.getProductById(created.getId());
 
-        // Assert
         assertThat(fetchedFromCache).isNotNull();
         assertThat(fetchedFromCache.getId()).isEqualTo(created.getId());
         assertThat(fetchedFromCache.getSku()).isEqualTo("PROD-KEY-01");
         assertThat(fetchedFromCache.getName()).isEqualTo("Mechanical Keyboard");
+    }
+
+    private Cache findCacheContaining(Object key) {
+        for (String cacheName : cacheManager.getCacheNames()) {
+            Cache cache = cacheManager.getCache(cacheName);
+            if (cache != null && cache.get(key) != null) {
+                return cache;
+            }
+        }
+        return null;
     }
 }
