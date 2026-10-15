@@ -1,6 +1,10 @@
 package dev.jahlopez.productcatalog.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -15,8 +19,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 /**
  * Configures Redis caching for the Product Catalog service.
  *
- * Enables Spring's caching support and configures Redis to serialize
- * cache keys as strings and cache values as JSON.
+ * <p>Enables Spring's caching support and defines JSON serialization
+ * for cached values and string serialization for cache keys.</p>
  */
 @Configuration
 @EnableCaching
@@ -25,22 +29,36 @@ public class RedisCacheConfig {
     /**
      * Defines the default serialization settings for Redis cache entries.
      *
-     * Uses StringRedisSerializer for cache keys to keep them human-readable
-     * and GenericJackson2JsonRedisSerializer for cache values to support
-     * JSON serialization and deserialization of cached Java objects.
+     * <p>Configures a dedicated Jackson {@link ObjectMapper} with Java time
+     * support and restricted polymorphic type handling. This allows cached
+     * application objects to be deserialized into their original types.</p>
      *
-     * @param objectMapper Spring Boot's configured Jackson ObjectMapper
      * @return the default Redis cache configuration
      */
     @Bean
-    RedisCacheConfiguration redisCacheConfiguration(
-            ObjectMapper objectMapper
-    ) {
+    RedisCacheConfiguration redisCacheConfiguration() {
+        BasicPolymorphicTypeValidator typeValidator =
+                BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType("dev.jahlopez.productcatalog.")
+                        .build();
+
+        ObjectMapper redisObjectMapper = new ObjectMapper();
+        redisObjectMapper.registerModule(new JavaTimeModule());
+        redisObjectMapper.disable(
+                SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
+        );
+
+        redisObjectMapper.activateDefaultTyping(
+                typeValidator,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
+        );
+
         GenericJackson2JsonRedisSerializer valueSerializer =
-                new GenericJackson2JsonRedisSerializer(objectMapper.copy());
+                new GenericJackson2JsonRedisSerializer(redisObjectMapper);
 
         return RedisCacheConfiguration.defaultCacheConfig()
-                // Serialize cache keys as strings instead of binary data.
+                // Serialize cache keys as strings.
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair
                                 .fromSerializer(new StringRedisSerializer())
@@ -55,12 +73,11 @@ public class RedisCacheConfig {
     /**
      * Creates the Redis-backed Spring Cache manager.
      *
-     * The connection factory provides access to the configured Redis server.
-     * The supplied cache configuration ensures cache entries use the
-     * serializers defined above.
+     * <p>Uses the supplied Redis connection factory and default cache
+     * configuration to manage serialized cache entries.</p>
      *
      * @param connectionFactory the Redis connection factory
-     * @param redisCacheConfiguration the default cache serialization settings
+     * @param redisCacheConfiguration the default Redis cache configuration
      * @return the configured Redis cache manager
      */
     @Bean
