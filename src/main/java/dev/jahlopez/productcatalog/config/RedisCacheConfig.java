@@ -44,13 +44,12 @@ public class RedisCacheConfig {
 
         BasicPolymorphicTypeValidator typeValidator =
                 BasicPolymorphicTypeValidator.builder()
-                        .allowIfSubType("dev.jahlopez.productcatalog.")
-                        .allowIfSubType("java.util.")
+                        .allowIfBaseType(Object.class)
                         .build();
 
         objectMapper.activateDefaultTyping(
                 typeValidator,
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                ObjectMapper.DefaultTyping.EVERYTHING,
                 JsonTypeInfo.As.PROPERTY
         );
 
