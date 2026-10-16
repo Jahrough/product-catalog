@@ -16,17 +16,23 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
 
+/**
+ * Enterprise Redis caching configuration class.
+ * Enables Spring caching infrastructure, defines custom secure JSON serialization,
+ * and configures default and tier-specific Time-To-Live (TTL) expiration rules.
+ */
 @Configuration
 @EnableCaching
 public class RedisCacheConfig {
 
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(60);
-    private static final Duration PRODUCTS_TTL = Duration.ofMinutes(30);
+    private static final Duration PRODUCTS_BY_ID_TTL = Duration.ofMinutes(30);
+    private static final Duration PRODUCTS_BY_SKU_TTL = Duration.ofMinutes(30);
     private static final Duration PRODUCTS_LIST_TTL = Duration.ofMinutes(15);
 
     /**
-     * Configures default Redis cache settings, including JSON serialization,
-     * string-based keys, disabled null caching, and a 60-minute TTL.
+     * Configures default Redis cache settings, including JSON serialization with secure polymorphic type validation,
+     * string-based keys, disabled null caching, and a default 60-minute TTL.
      *
      * @return the default Redis cache configuration
      */
@@ -67,8 +73,8 @@ public class RedisCacheConfig {
     }
 
     /**
-     * Applies cache-specific TTLs while retaining the default serialization
-     * settings and other cache configuration options.
+     * Applies cache-specific TTLs for 'productsById', 'productsBySku', and 'productsList'
+     * while retaining the default serialization settings and other configuration options.
      *
      * @param cacheConfiguration the default Redis cache configuration
      * @return the Redis cache manager customizer
@@ -78,13 +84,8 @@ public class RedisCacheConfig {
             RedisCacheConfiguration cacheConfiguration
     ) {
         return builder -> builder
-                .withCacheConfiguration(
-                        "products",
-                        cacheConfiguration.entryTtl(PRODUCTS_TTL)
-                )
-                .withCacheConfiguration(
-                        "productsList",
-                        cacheConfiguration.entryTtl(PRODUCTS_LIST_TTL)
-                );
+                .withCacheConfiguration("productsById", cacheConfiguration.entryTtl(PRODUCTS_BY_ID_TTL))
+                .withCacheConfiguration("productsBySku", cacheConfiguration.entryTtl(PRODUCTS_BY_SKU_TTL))
+                .withCacheConfiguration("productsList", cacheConfiguration.entryTtl(PRODUCTS_LIST_TTL));
     }
 }

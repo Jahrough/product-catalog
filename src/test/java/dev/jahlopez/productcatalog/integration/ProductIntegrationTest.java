@@ -1,6 +1,6 @@
-
 package dev.jahlopez.productcatalog.integration;
 
+import com.redis.testcontainers.RedisContainer;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.model.Product;
@@ -15,10 +15,10 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * while verifying database persistence, Flyway migrations, and Redis caching behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
 
@@ -41,16 +41,15 @@ class ProductIntegrationTest {
      */
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-                    .withDatabaseName("testdb")
-                    .withUsername("test")
-                    .withPassword("test");
+            .withDatabaseName("testdb")
+            .withUsername("test")
+            .withPassword("test");
 
     /**
      * Isolated Redis container for caching and distributed data tier testing.
      */
     @Container
-    static final GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
-                    .withExposedPorts(6379);
+    static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
     /**
      * Dynamically registers Spring Boot datasource and Redis properties from the active Testcontainers instances.
@@ -86,7 +85,7 @@ class ProductIntegrationTest {
         productRepository.deleteAll();
         productRepository.flush();
 
-        for (String cacheName : cacheManager.getCacheNames()) {
+        for (String cacheName : List.of("productsById", "productsBySku", "productsList")) {
             Cache cache = cacheManager.getCache(cacheName);
             if (cache != null) {
                 cache.clear();
@@ -143,35 +142,35 @@ class ProductIntegrationTest {
         assertThat(fetchedFirst.getId()).isEqualTo(created.getId());
         assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
 
-        // Confirm that a cache entry exists without assuming its serialized type.
-        Cache productCache = findCacheContaining(created.getId());
-        assertThat(productCache).as("Product lookup cache").isNotNull();
-        assertThat(productCache.get(created.getId()))
-                .as("Cached product entry")
-                .isNotNull();
+        // Retrieve the specific cache and entry
+        Cache productCache = cacheManager.getCache("productsById");
+        assertThat(productCache).as("'productsById' cache must be configured").isNotNull();
 
-        // Delete the database row but preserve the cache entry.
+        Cache.ValueWrapper cachedEntry = productCache.get(created.getId());
+        assertThat(cachedEntry).as("Product lookup should create a cache entry").isNotNull();
+
+        assertThat(cachedEntry.get())
+                .as("Cached value should deserialize to ProductResponseDto")
+                .isInstanceOf(ProductResponseDto.class);
+
+        ProductResponseDto cachedProduct = (ProductResponseDto) cachedEntry.get();
+
+        assertThat(cachedProduct.getId()).isEqualTo(created.getId());
+        assertThat(cachedProduct.getSku()).isEqualTo("PROD-KEY-01");
+
+        // Delete directly through the repository so cache eviction
+        // in ProductService.deleteProduct() is not triggered.
         productRepository.deleteById(created.getId());
         productRepository.flush();
 
         assertThat(productRepository.findById(created.getId())).isEmpty();
 
-        // A successful result here demonstrates that the service can use its cache.
+        // The cache should still supply the product despite its deletion.
         ProductResponseDto fetchedFromCache = productService.getProductById(created.getId());
 
         assertThat(fetchedFromCache).isNotNull();
         assertThat(fetchedFromCache.getId()).isEqualTo(created.getId());
         assertThat(fetchedFromCache.getSku()).isEqualTo("PROD-KEY-01");
         assertThat(fetchedFromCache.getName()).isEqualTo("Mechanical Keyboard");
-    }
-
-    private Cache findCacheContaining(Object key) {
-        for (String cacheName : cacheManager.getCacheNames()) {
-            Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null && cache.get(key) != null) {
-                return cache;
-            }
-        }
-        return null;
     }
 }

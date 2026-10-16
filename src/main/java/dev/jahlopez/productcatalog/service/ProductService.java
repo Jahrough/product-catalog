@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Service component responsible for orchestrating product catalog business logic,
@@ -28,13 +27,13 @@ public class ProductService {
 
     /**
      * Creates and persists a new product record in the database.
-     * Evicts all entries in the 'products' and 'productsList' caches to maintain data consistency.
+     * Evicts all entries across 'productsById', 'productsBySku', and 'productsList' caches to maintain data consistency.
      *
      * @param requestDto the product creation payload containing SKU, name, price, etc.
      * @return the saved product response DTO
      */
     @Transactional
-    @CacheEvict(value = {"products", "productsList"}, allEntries = true)
+    @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
     public ProductResponseDto createProduct(ProductRequestDto requestDto) {
         Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
@@ -43,14 +42,14 @@ public class ProductService {
 
     /**
      * Retrieves product details by its unique primary key ID.
-     * Leverages Redis caching ('products' cache tier) for high-performance read throughput.
+     * Leverages Redis caching ('productsById' cache tier) for high-performance read throughput.
      *
      * @param id the database primary key identifier
      * @return the product response DTO
      * @throws EntityNotFoundException if no product exists with the given ID
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "products", key = "#id")
+    @Cacheable(value = "productsById", key = "#id")
     public ProductResponseDto getProductById(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
@@ -59,14 +58,14 @@ public class ProductService {
 
     /**
      * Retrieves product details by its unique Stock Keeping Unit (SKU).
-     * Leverages Redis caching ('products' cache tier) for low-latency lookups.
+     * Leverages Redis caching ('productsBySku' cache tier) for low-latency lookups.
      *
      * @param sku the unique product SKU identifier
      * @return the product response DTO
      * @throws EntityNotFoundException if no product exists with the given SKU
      */
     @Transactional(readOnly = true)
-    @Cacheable(value = "products", key = "#sku")
+    @Cacheable(value = "productsBySku", key = "#sku")
     public ProductResponseDto getProductBySku(String sku) {
         Product product = productRepository.findBySku(sku)
                 .orElseThrow(() -> new EntityNotFoundException("Product not found with SKU: " + sku));
@@ -84,18 +83,18 @@ public class ProductService {
     public List<ProductResponseDto> getAllProducts() {
         return productRepository.findAll().stream()
                 .map(productMapper::toResponseDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
      * Deletes a product record by its database primary key ID.
-     * Evicts all entries in the 'products' and 'productsList' caches to ensure cache consistency.
+     * Evicts all entries across 'productsById', 'productsBySku', and 'productsList' caches to ensure cache consistency.
      *
      * @param id the database primary key identifier of the product to delete
      * @throws EntityNotFoundException if no product exists with the given ID
      */
     @Transactional
-    @CacheEvict(value = {"products", "productsList"}, allEntries = true)
+    @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
     public void deleteProduct(Long id) {
         if (!productRepository.existsById(id)) {
             throw new EntityNotFoundException("Product not found with id: " + id);
