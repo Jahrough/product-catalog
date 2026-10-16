@@ -3,81 +3,73 @@ package dev.jahlopez.productcatalog.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import dev.jahlopez.productcatalog.dto.ProductResponseDto;
-import org.springframework.cache.CacheManager;
+import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/**
- * Configures Redis caching for the Product Catalog service.
- *
- * <p>Enables Spring's caching support and defines JSON serialization
- * for cached values and string serialization for cache keys.</p>
- */
+import java.time.Duration;
+
 @Configuration
 @EnableCaching
 public class RedisCacheConfig {
 
+    private static final Duration DEFAULT_TTL = Duration.ofMinutes(60);
+    private static final Duration PRODUCTS_TTL = Duration.ofMinutes(30);
+    private static final Duration PRODUCTS_LIST_TTL = Duration.ofMinutes(15);
+
     /**
-     * Defines the default serialization settings for Redis cache entries.
-     *
-     * <p>Configures a dedicated Jackson {@link ObjectMapper} with Java time
-     * support and restricted polymorphic type handling. This allows cached
-     * application objects to be deserialized into their original types.</p>
+     * Configures default Redis cache settings, including JSON serialization,
+     * string-based keys, disabled null caching, and a 60-minute TTL.
      *
      * @return the default Redis cache configuration
      */
     @Bean
-    RedisCacheConfiguration redisCacheConfiguration() {
-        ObjectMapper redisObjectMapper = new ObjectMapper();
-        redisObjectMapper.registerModule(new JavaTimeModule());
-        redisObjectMapper.disable(
-                SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
-        );
+    public RedisCacheConfiguration cacheConfiguration() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-        Jackson2JsonRedisSerializer<ProductResponseDto> valueSerializer =
-                new Jackson2JsonRedisSerializer<>(
-                        redisObjectMapper,
-                        ProductResponseDto.class
-                );
+        GenericJackson2JsonRedisSerializer jsonSerializer =
+                new GenericJackson2JsonRedisSerializer(objectMapper);
 
         return RedisCacheConfiguration.defaultCacheConfig()
-                // Serialize cache keys as strings.
+                .entryTtl(DEFAULT_TTL)
+                .disableCachingNullValues()
                 .serializeKeysWith(
-                        RedisSerializationContext.SerializationPair
-                                .fromSerializer(new StringRedisSerializer())
+                        RedisSerializationContext.SerializationPair.fromSerializer(
+                                new StringRedisSerializer()
+                        )
                 )
-                // Serialize cached objects as JSON with type information.
                 .serializeValuesWith(
-                        RedisSerializationContext.SerializationPair
-                                .fromSerializer(valueSerializer)
+                        RedisSerializationContext.SerializationPair.fromSerializer(
+                                jsonSerializer
+                        )
                 );
     }
 
     /**
-     * Creates the Redis-backed Spring Cache manager.
+     * Applies cache-specific TTLs while retaining the default serialization
+     * settings and other cache configuration options.
      *
-     * <p>Uses the supplied Redis connection factory and default cache
-     * configuration to manage serialized cache entries.</p>
-     *
-     * @param connectionFactory the Redis connection factory
-     * @param redisCacheConfiguration the default Redis cache configuration
-     * @return the configured Redis cache manager
+     * @return the Redis cache manager customizer
      */
     @Bean
-    CacheManager cacheManager(
-            RedisConnectionFactory connectionFactory,
-            RedisCacheConfiguration redisCacheConfiguration
+    public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer(
+            RedisCacheConfiguration cacheConfiguration
     ) {
-        return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(redisCacheConfiguration)
-                .build();
+        return builder -> builder
+                .withCacheConfiguration(
+                        "products",
+                        cacheConfiguration.entryTtl(PRODUCTS_TTL)
+                )
+                .withCacheConfiguration(
+                        "productsList",
+                        cacheConfiguration.entryTtl(PRODUCTS_LIST_TTL)
+                );
     }
 }
