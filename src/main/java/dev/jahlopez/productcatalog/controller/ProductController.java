@@ -37,6 +37,12 @@ public class ProductController {
 
     private final ProductService productService;
 
+    /**
+     * Creates and persists a new product record.
+     *
+     * @param requestDto the product creation payload
+     * @return the created product response DTO with HTTP 201 Created status
+     */
     @Operation(
             summary = "Create a new product",
             description = "Validates and persists a new product record into the database. Evicts product cache entries to maintain consistency."
@@ -53,6 +59,12 @@ public class ProductController {
         return ResponseEntity.status(HttpStatus.CREATED).body(createdProduct);
     }
 
+    /**
+     * Retrieves product details by its database primary key.
+     *
+     * @param id the product primary key ID
+     * @return the product response DTO with HTTP 200 OK status
+     */
     @Operation(
             summary = "Retrieve a product by internal ID",
             description = "Fetches product details by database primary key. Leverages Redis caching for high-traffic read performance."
@@ -68,6 +80,12 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProductById(id));
     }
 
+    /**
+     * Retrieves product details by its unique SKU identifier.
+     *
+     * @param sku the unique product SKU string
+     * @return the product response DTO with HTTP 200 OK status
+     */
     @Operation(
             summary = "Retrieve a product by Stock Keeping Unit (SKU)",
             description = "Fetches product details using its unique business SKU identifier. Cached in Redis for low-latency lookups."
@@ -83,6 +101,11 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProductBySku(sku));
     }
 
+    /**
+     * Retrieves a complete list of all active products in the catalog.
+     *
+     * @return a list of product response DTOs with HTTP 200 OK status
+     */
     @Operation(
             summary = "List all products",
             description = "Retrieves a complete list of all active products in the catalog. Results are cached under the 'productsList' cache tier."
@@ -97,6 +120,12 @@ public class ProductController {
         return ResponseEntity.ok(productService.getAllProducts());
     }
 
+    /**
+     * Deletes a product record by its database primary key.
+     *
+     * @param id the product primary key ID
+     * @return an empty response with HTTP 204 No Content status
+     */
     @Operation(
             summary = "Delete product by ID",
             description = "Removes a product record from the database by its primary key and evicts all associated product and list caches."
