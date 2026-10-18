@@ -2,6 +2,7 @@ package dev.jahlopez.productcatalog.service;
 
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
+import dev.jahlopez.productcatalog.event.ProductEvent;
 import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.Product;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
@@ -12,11 +13,12 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
  * Service component responsible for orchestrating product catalog business logic,
- * database persistence transactions, type-safe object mapping, and Redis caching integration.
+ * database persistence transactions, type-safe object mapping, Redis caching, and Kafka event broadcasting.
  */
 @Service
 @RequiredArgsConstructor
@@ -24,10 +26,11 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    private final ProductEventPublisher productEventPublisher;
 
     /**
      * Creates and persists a new product record in the database.
-     * Evicts all entries across 'productsById', 'productsBySku', and 'productsList' caches to maintain data consistency.
+     * Broadcasts a CREATED event to Kafka and evicts all cache tiers to maintain consistency.
      *
      * @param requestDto the product creation payload containing SKU, name, price, etc.
      * @return the saved product response DTO
@@ -37,6 +40,18 @@ public class ProductService {
     public ProductResponseDto createProduct(ProductRequestDto requestDto) {
         Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
+
+        // Publish CREATED event to Kafka
+        productEventPublisher.publishProductEvent(ProductEvent.builder()
+                .productId(savedProduct.getId())
+                .sku(savedProduct.getSku())
+                .name(savedProduct.getName())
+                .price(savedProduct.getPrice())
+                .stockQuantity(savedProduct.getStockQuantity())
+                .eventType(ProductEvent.EventType.CREATED)
+                .timestamp(LocalDateTime.now())
+                .build());
+
         return productMapper.toResponseDto(savedProduct);
     }
 
@@ -88,7 +103,7 @@ public class ProductService {
 
     /**
      * Deletes a product record by its database primary key ID.
-     * Evicts all entries across 'productsById', 'productsBySku', and 'productsList' caches to ensure cache consistency.
+     * Broadcasts a DELETED event to Kafka and evicts all cache tiers to ensure cache consistency.
      *
      * @param id the database primary key identifier of the product to delete
      * @throws EntityNotFoundException if no product exists with the given ID
@@ -96,9 +111,20 @@ public class ProductService {
     @Transactional
     @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
     public void deleteProduct(Long id) {
-        if (!productRepository.existsById(id)) {
-            throw new EntityNotFoundException("Product not found with id: " + id);
-        }
-        productRepository.deleteById(id);
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+
+        productRepository.delete(product);
+
+        // Publish DELETED event to Kafka
+        productEventPublisher.publishProductEvent(ProductEvent.builder()
+                .productId(product.getId())
+                .sku(product.getSku())
+                .name(product.getName())
+                .price(product.getPrice())
+                .stockQuantity(product.getStockQuantity())
+                .eventType(ProductEvent.EventType.DELETED)
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 }

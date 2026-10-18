@@ -20,6 +20,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -36,8 +37,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
 
+    // Automatically detect Docker Desktop socket on macOS if DOCKER_HOST is not set
+    static {
+        if (System.getenv("DOCKER_HOST") == null && System.getProperty("docker.host") == null) {
+            String macSocketPath = System.getProperty("user.home") + "/.docker/run/docker.sock";
+            if (new File(macSocketPath).exists()) {
+                System.setProperty("docker.host", "unix://" + macSocketPath);
+            }
+        }
+    }
+
     /**
-     * Isolated PostgreSQL container for database integration testing.
+     * Isolated PostgreSQL container instance for integration testing.
      */
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
@@ -54,16 +65,17 @@ class ProductIntegrationTest {
     /**
      * Dynamically registers Spring Boot datasource and Redis properties from the active Testcontainers instances.
      *
-     * @param registry the dynamic property registry
+     * @param registry the dynamic property registry provided by Spring Test framework
      */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
+        // PostgreSQL datasource properties mapped from Testcontainers
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> true);
 
-        // Redis properties dynamically mapped from Testcontainer
+        // Redis host and dynamic port mapping from Testcontainers
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
@@ -82,9 +94,11 @@ class ProductIntegrationTest {
      */
     @BeforeEach
     void setUp() {
+        // Purge database table content to guarantee test isolation
         productRepository.deleteAll();
         productRepository.flush();
 
+        // Evict all entries across all application cache regions
         for (String cacheName : List.of("productsById", "productsBySku", "productsList")) {
             Cache cache = cacheManager.getCache(cacheName);
             if (cache != null) {
@@ -99,6 +113,7 @@ class ProductIntegrationTest {
      */
     @Test
     void shouldSaveAndRetrieveProductFromDatabase() {
+        // Arrange: Instantiate a product entity
         Product product = Product.builder()
                 .sku("PROD-MON-34")
                 .name("Ultrawide Monitor")
@@ -107,13 +122,16 @@ class ProductIntegrationTest {
                 .stockQuantity(15)
                 .build();
 
+        // Act: Persist the product directly to PostgreSQL and fetch all records
         Product savedProduct = productRepository.saveAndFlush(product);
         List<Product> products = productRepository.findAll();
 
+        // Assert: Ensure generated audit fields and primary key are present
         assertThat(savedProduct.getId()).isNotNull();
         assertThat(savedProduct.getCreatedAt()).isNotNull();
         assertThat(savedProduct.getUpdatedAt()).isNotNull();
 
+        // Assert: Verify persisted field values match the expected state
         assertThat(products).hasSize(1);
         assertThat(products.get(0).getSku()).isEqualTo("PROD-MON-34");
         assertThat(products.get(0).getName()).isEqualTo("Ultrawide Monitor");
@@ -126,6 +144,7 @@ class ProductIntegrationTest {
      */
     @Test
     void shouldCacheProductLookupInRedis() {
+        // Arrange: Prepare request DTO for product creation
         ProductRequestDto requestDto = new ProductRequestDto();
         requestDto.setSku("PROD-KEY-01");
         requestDto.setName("Mechanical Keyboard");
@@ -133,16 +152,18 @@ class ProductIntegrationTest {
         requestDto.setPrice(new BigDecimal("129.99"));
         requestDto.setStockQuantity(50);
 
+        // Create product via service
         ProductResponseDto created = productService.createProduct(requestDto);
 
-        // First lookup loads the product and should populate the cache.
+        // Act: First lookup loads the product from DB and populates the Redis cache
         ProductResponseDto fetchedFirst = productService.getProductById(created.getId());
 
+        // Assert: Check primary fetch returned correct data
         assertThat(fetchedFirst).isNotNull();
         assertThat(fetchedFirst.getId()).isEqualTo(created.getId());
         assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
 
-        // Retrieve the specific cache and entry
+        // Inspect Redis cache instance directly to verify caching mechanism
         Cache productCache = cacheManager.getCache("productsById");
         assertThat(productCache).as("'productsById' cache must be configured").isNotNull();
 
@@ -154,20 +175,20 @@ class ProductIntegrationTest {
                 .isInstanceOf(ProductResponseDto.class);
 
         ProductResponseDto cachedProduct = (ProductResponseDto) cachedEntry.get();
-
         assertThat(cachedProduct.getId()).isEqualTo(created.getId());
         assertThat(cachedProduct.getSku()).isEqualTo("PROD-KEY-01");
 
-        // Delete directly through the repository so cache eviction
-        // in ProductService.deleteProduct() is not triggered.
+        // Act: Delete record directly through repository so cache eviction in ProductService.deleteProduct() is NOT triggered
         productRepository.deleteById(created.getId());
         productRepository.flush();
 
+        // Ensure database row is fully removed
         assertThat(productRepository.findById(created.getId())).isEmpty();
 
-        // The cache should still supply the product despite its deletion.
+        // Act: Fetch product via service layer again; should hit Redis cache instead of DB
         ProductResponseDto fetchedFromCache = productService.getProductById(created.getId());
 
+        // Assert: Ensure cached payload is returned intact despite database deletion
         assertThat(fetchedFromCache).isNotNull();
         assertThat(fetchedFromCache.getId()).isEqualTo(created.getId());
         assertThat(fetchedFromCache.getSku()).isEqualTo("PROD-KEY-01");

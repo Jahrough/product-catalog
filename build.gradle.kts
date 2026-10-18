@@ -31,6 +31,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     runtimeOnly("org.postgresql:postgresql")
 
+    // Event Streaming: Apache Kafka
+    implementation("org.springframework.kafka:spring-kafka:3.2.4")
+
     // Database Migrations: Flyway
     implementation("org.flywaydb:flyway-core:10.17.0")
     implementation("org.flywaydb:flyway-database-postgresql:10.17.0")
@@ -42,8 +45,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // Monitoring and Kubernetes Health Probes
+    // Monitoring, Kubernetes Health Probes, and Prometheus Metrics
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // Object Mapping: MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
@@ -54,20 +58,31 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
-    // Testing: JUnit 5 and Spring Boot
+    // Testing: JUnit 5, Spring Boot, and Embedded Kafka
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
 
     // Testing: In-Memory Database
     testImplementation("com.h2database:h2")
 
-    // Integration Testing: Testcontainers (Fixed with Platform BOM & Explicit Versions)
+    // Integration Testing: Testcontainers
     testImplementation(platform("org.testcontainers:testcontainers-bom:1.20.5"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:kafka")
     testImplementation("com.redis:testcontainers-redis:2.2.4")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.addAll(
+        listOf(
+            "-Amapstruct.defaultComponentModel=spring",
+            "-Amapstruct.unmappedTargetPolicy=IGNORE"
+        )
+    )
 }
 
 tasks.test {

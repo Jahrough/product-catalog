@@ -17,24 +17,30 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit test suite for {@link ProductService}.
- * Utilizes Mockito to isolate business logic execution from underlying persistence and database layers,
- * verifying correct orchestration of data mapping, repository calls, and exception handling.
+ * Utilizes Mockito to isolate business logic execution from underlying persistence, caching, and messaging layers.
  */
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
+    // Mock the data repository to isolate service logic from database operations
     @Mock
     private ProductRepository productRepository;
 
+    // Mock the mapper to isolate entity-to-DTO conversion logic
     @Mock
     private ProductMapper productMapper;
 
+    // Mock the event publisher to isolate asynchronous Kafka messaging during service tests
+    @Mock
+    private ProductEventPublisher productEventPublisher;
+
+    // Inject the mocked dependencies into the ProductService instance under test
     @InjectMocks
     private ProductService productService;
 
@@ -43,7 +49,7 @@ class ProductServiceTest {
      */
     @Test
     void getAllProducts_ShouldReturnListOfProducts() {
-        // Arrange
+        // Arrange: Create sample product entity and expected response DTO
         Product product = Product.builder()
                 .id(1L)
                 .sku("PROD-HUB-001")
@@ -62,16 +68,19 @@ class ProductServiceTest {
                 .stockQuantity(100)
                 .build();
 
+        // Stub repository and mapper behaviors
         when(productRepository.findAll()).thenReturn(List.of(product));
         when(productMapper.toResponseDto(product)).thenReturn(responseDto);
 
-        // Act
+        // Act: Call service method
         List<ProductResponseDto> products = productService.getAllProducts();
 
-        // Assert
+        // Assert: Validate the returned list size and mapped fields
         assertThat(products).hasSize(1);
         assertThat(products.get(0).getName()).isEqualTo("USB-C Hub");
         assertThat(products.get(0).getPrice()).isEqualByComparingTo(BigDecimal.valueOf(49.99));
+
+        // Verify mock interactions
         verify(productRepository, times(1)).findAll();
         verify(productMapper, times(1)).toResponseDto(product);
     }
@@ -81,7 +90,7 @@ class ProductServiceTest {
      */
     @Test
     void getProductById_WhenProductExists_ShouldReturnProduct() {
-        // Arrange
+        // Arrange: Prepare sample product and response DTO
         Product product = Product.builder()
                 .id(1L)
                 .sku("PROD-HUB-001")
@@ -101,13 +110,15 @@ class ProductServiceTest {
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
         when(productMapper.toResponseDto(product)).thenReturn(responseDto);
 
-        // Act
+        // Act: Fetch product by ID
         ProductResponseDto found = productService.getProductById(1L);
 
-        // Assert
-        assertNotNull(found);
-        assertEquals(product.getId(), found.getId());
+        // Assert: Ensure the returned DTO matches expectations
+        assertThat(found).isNotNull();
+        assertThat(found.getId()).isEqualTo(product.getId());
         assertThat(found.getName()).isEqualTo("USB-C Hub");
+
+        // Verify mock interactions
         verify(productRepository, times(1)).findById(1L);
         verify(productMapper, times(1)).toResponseDto(product);
     }
@@ -117,24 +128,26 @@ class ProductServiceTest {
      */
     @Test
     void getProductById_WhenProductNotFound_ShouldThrowException() {
-        // Arrange
+        // Arrange: Stub repository to return empty Optional for an unknown ID
         when(productRepository.findById(99L)).thenReturn(Optional.empty());
 
-        // Act & Assert
+        // Act & Assert: Verify that calling the method throws EntityNotFoundException
         assertThrows(EntityNotFoundException.class, () -> {
             productService.getProductById(99L);
         });
+
+        // Verify repository was queried and mapper was never invoked due to early exception
         verify(productRepository, times(1)).findById(99L);
         verifyNoInteractions(productMapper);
     }
 
     /**
      * Verifies that creating a new product maps the request DTO to an entity, saves it via the repository,
-     * and returns the populated response DTO.
+     * triggers an event publication, and returns the populated response DTO.
      */
     @Test
     void createProduct_ShouldSaveAndReturnProduct() {
-        // Arrange
+        // Arrange: Set up incoming request DTO and expected intermediate/output objects
         ProductRequestDto requestDto = new ProductRequestDto();
         requestDto.setSku("PROD-WIR-001");
         requestDto.setName("Wireless Charger");
@@ -168,19 +181,54 @@ class ProductServiceTest {
                 .stockQuantity(requestDto.getStockQuantity())
                 .build();
 
+        // Stub mapper, repository, and event publisher behaviors
         when(productMapper.toEntity(any(ProductRequestDto.class))).thenReturn(productToEntity);
         when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
         when(productMapper.toResponseDto(savedProduct)).thenReturn(responseDto);
+        doNothing().when(productEventPublisher).publishProductEvent(any());
 
-        // Act
+        // Act: Execute create product operation
         ProductResponseDto result = productService.createProduct(requestDto);
 
-        // Assert
+        // Assert: Validate saved response fields
         assertThat(result.getId()).isNotNull();
         assertThat(result.getName()).isEqualTo("Wireless Charger");
         assertThat(result.getPrice()).isEqualByComparingTo(BigDecimal.valueOf(29.99));
+
+        // Verify all expected collaborators were called correctly
         verify(productMapper, times(1)).toEntity(any(ProductRequestDto.class));
         verify(productRepository, times(1)).save(any(Product.class));
         verify(productMapper, times(1)).toResponseDto(savedProduct);
+        verify(productEventPublisher, times(1)).publishProductEvent(any());
+    }
+
+    /**
+     * Verifies that deleting an existing product successfully removes the entity from the database,
+     * triggers the publication of a lifecycle deletion event to Kafka, and executes all expected repository interactions.
+     */
+    @Test
+    void deleteProduct_WhenProductExists_ShouldDeleteAndPublishEvent() {
+        // Arrange: Prepare a sample product entity simulating an existing record in the database
+        Long productId = 1L;
+        Product product = Product.builder()
+                .id(productId)
+                .sku("PROD-HUB-001")
+                .name("USB-C Hub")
+                .price(BigDecimal.valueOf(49.99))
+                .stockQuantity(100)
+                .build();
+
+        // Stub the repository lookup to return our sample product, and mock the delete and event publishing calls
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        doNothing().when(productRepository).delete(product);
+        doNothing().when(productEventPublisher).publishProductEvent(any());
+
+        // Act: Invoke the service method responsible for product deletion and event broadcasting
+        productService.deleteProduct(productId);
+
+        // Assert: Verify that the product was found, explicitly deleted through the repository, and an event was dispatched
+        verify(productRepository, times(1)).findById(productId);
+        verify(productRepository, times(1)).delete(product);
+        verify(productEventPublisher, times(1)).publishProductEvent(any());
     }
 }
