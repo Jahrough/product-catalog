@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -36,6 +37,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
+
+    // Automatically detect Docker socket in an environment-agnostic manner across macOS and Linux/CI
+    static {
+        if (System.getenv("DOCKER_HOST") == null && System.getProperty("docker.host") == null) {
+            String userHome = System.getProperty("user.home");
+            String[] possibleSockets = {
+                    userHome + "/.docker/run/docker.sock",
+                    "/var/run/docker.sock",
+                    userHome + "/.colima/default/docker.sock"
+            };
+
+            for (String socketPath : possibleSockets) {
+                if (new File(socketPath).exists()) {
+                    System.setProperty("docker.host", "unix://" + socketPath);
+                    break;
+                }
+            }
+        }
+    }
 
     /** Isolated PostgreSQL container instance for integration testing. */
     @Container
