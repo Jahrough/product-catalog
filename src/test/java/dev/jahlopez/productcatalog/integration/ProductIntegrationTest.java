@@ -38,21 +38,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
 
-    // Automatically detect Docker socket in an environment-agnostic manner across macOS and Linux/CI
+    // 💡 Environment-agnostic Docker socket discovery fallback for macOS / Linux
     static {
-        if (System.getenv("DOCKER_HOST") == null && System.getProperty("docker.host") == null) {
+        if (System.getenv("DOCKER_HOST") == null) {
             String userHome = System.getProperty("user.home");
-            String[] possibleSockets = {
-                    userHome + "/.docker/run/docker.sock",
-                    "/var/run/docker.sock",
-                    userHome + "/.colima/default/docker.sock"
-            };
+            java.io.File colimaSocket = new java.io.File(userHome + "/.colima/default/docker.sock");
+            java.io.File desktopSocket = new java.io.File(userHome + "/.docker/run/docker.sock");
+            java.io.File standardSocket = new java.io.File("/var/run/docker.sock");
 
-            for (String socketPath : possibleSockets) {
-                if (new File(socketPath).exists()) {
-                    System.setProperty("docker.host", "unix://" + socketPath);
-                    break;
-                }
+            if (colimaSocket.exists()) {
+                System.setProperty("docker.host", "unix://" + colimaSocket.getAbsolutePath());
+            } else if (desktopSocket.exists()) {
+                System.setProperty("docker.host", "unix://" + desktopSocket.getAbsolutePath());
+            } else if (standardSocket.exists()) {
+                System.setProperty("docker.host", "unix:///var/run/docker.sock");
             }
         }
     }
