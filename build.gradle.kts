@@ -45,9 +45,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // Monitoring, Kubernetes Health Probes, and Prometheus Metrics
+    // Enterprise Observability: Actuator, Metrics (Prometheus), Distributed Tracing (OpenTelemetry), and Structured JSON Logging
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-zipkin")
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     // Object Mapping: MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
@@ -87,5 +90,5 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
-    systemProperty("docker.host", "unix://" + System.getProperty("user.home") + "/.docker/run/docker.sock")
+    systemProperty("docker.host", System.getenv("DOCKER_HOST") ?: ("unix://" + System.getProperty("user.home") + "/.docker/run/docker.sock"))
 }
