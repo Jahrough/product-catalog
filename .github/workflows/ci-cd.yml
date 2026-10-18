@@ -114,14 +114,17 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Update Kubeconfig for EKS
         run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
       - name: Deploy Manifests and Rollout Update
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         run: |
-          kubectl apply -f k8s/product-catalog.yaml
+          envsubst < k8s/product-catalog.yaml | kubectl apply -f -
           kubectl apply -f k8s/network-policy.yaml
-          kubectl set image deployment/product-catalog product-catalog=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} -n ${{ env.K8S_NAMESPACE }}
           kubectl rollout status deployment/product-catalog -n ${{ env.K8S_NAMESPACE }}

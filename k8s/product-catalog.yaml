@@ -1,3 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-catalog-config
+  namespace: default
+data:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://product-db.c123456789.us-east-1.rds.amazonaws.com:5432/productdb"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,24 +25,21 @@ spec:
     spec:
       containers:
         - name: product-catalog
-          image: <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/product-catalog:latest
+          image: ${IMAGE_URI}
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
+          envFrom:
+            - configMapRef:
+                name: product-catalog-config
           env:
-            - name: DB_HOST
-              value: "product-db.c123456789.us-east-1.rds.amazonaws.com" # Replace with your AWS RDS endpoint
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_NAME
-              value: "productdb"
-            - name: DB_USER
+            - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: db-secret
                   key: username
-            - name: DB_PASSWORD
+            - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secret
