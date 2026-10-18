@@ -21,7 +21,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import java.io.File;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -38,19 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class ProductIntegrationTest {
 
-    // Automatically detect Docker Desktop socket on macOS if DOCKER_HOST is not set
-    static {
-        if (System.getenv("DOCKER_HOST") == null && System.getProperty("docker.host") == null) {
-            String macSocketPath = System.getProperty("user.home") + "/.docker/run/docker.sock";
-            if (new File(macSocketPath).exists()) {
-                System.setProperty("docker.host", "unix://" + macSocketPath);
-            }
-        }
-    }
-
-    /**
-     * Isolated PostgreSQL container instance for integration testing.
-     */
+    /** Isolated PostgreSQL container instance for integration testing. */
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
             .withDatabaseName("testdb")

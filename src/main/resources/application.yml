@@ -15,7 +15,15 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 2000ms # Corrected time unit from '2000m' to '2000ms'
+      timeout: 2000ms
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
 
   jpa:
     hibernate:
@@ -39,6 +47,7 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: method
 
+# Management, Actuator, and Kubernetes Probe Configuration
 management:
   endpoints:
     web:
@@ -48,3 +57,4 @@ management:
     health:
       probes:
         enabled: true
+      show-details: always
