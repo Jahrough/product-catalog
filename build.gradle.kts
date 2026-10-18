@@ -54,12 +54,16 @@ dependencies {
 
     // Object Mapping: MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
 
-    // Boilerplate Reduction: Lombok and MapStruct Binding
+    // Boilerplate Reduction: Lombok and MapStruct Binding (Order in annotationProcessor matters)
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
+
+    // Test Scope Lombok Support
+    testCompileOnly("org.projectlombok:lombok")
+    testAnnotationProcessor("org.projectlombok:lombok")
 
     // Testing: JUnit 5, Spring Boot, and Embedded Kafka
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
