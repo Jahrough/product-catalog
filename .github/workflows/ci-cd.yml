@@ -6,10 +6,16 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Centralized configuration constants to eliminate duplication across jobs
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::YOUR_ACTUAL_AWS_ACCOUNT_ID:role/GitHubActionsEKSDeploymentRole
+  ECR_REPOSITORY: product-catalog
+  EKS_CLUSTER_NAME: product-catalog-cluster
+  K8S_NAMESPACE: default
+
 permissions:
-  id-token: write
   contents: read
-  security-events: write # Required to upload security scan results to GitHub
 
 jobs:
   test:
@@ -37,18 +43,20 @@ jobs:
     name: Container Vulnerability Scan
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write # Required to upload security scan results to GitHub
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Build Local Docker Image for Scanning
-        run: docker build -t product-catalog:${{ github.sha }} .
+        run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
 
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'product-catalog:${{ github.sha }}'
+          image-ref: '${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -60,9 +68,12 @@ jobs:
 
   build-and-push:
     name: Containerize & Push to ECR
-    needs: security-scan # Blocks push if vulnerability scan job fails (if configured with exit-code: 1)
+    needs: security-scan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for AWS OIDC
+      contents: read
 
     steps:
       - name: Checkout Code
@@ -71,8 +82,8 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/GitHubActionsEKSDeploymentRole
-          aws-region: us-east-1
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -81,16 +92,17 @@ jobs:
       - name: Build, Tag, and Push Docker Image
         env:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          REPOSITORY: product-catalog
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG -t $REGISTRY/$REPOSITORY:latest .
-          docker push $REGISTRY/$REPOSITORY --all-tags
+          docker build -t $REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} -t $REGISTRY/${{ env.ECR_REPOSITORY }}:latest .
+          docker push $REGISTRY/${{ env.ECR_REPOSITORY }} --all-tags
 
   deploy:
     name: Deploy to AWS EKS
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for AWS OIDC
+      contents: read
 
     steps:
       - name: Checkout Code
@@ -99,11 +111,11 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/GitHubActionsEKSDeploymentRole
-          aws-region: us-east-1
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Update Kubeconfig for EKS
-        run: aws eks update-kubeconfig --name product-catalog-cluster --region us-east-1
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
       - name: Deploy Manifests and Rollout Update
         env:
@@ -111,5 +123,5 @@ jobs:
         run: |
           kubectl apply -f k8s/product-catalog.yaml
           kubectl apply -f k8s/network-policy.yaml
-          kubectl set image deployment/product-catalog product-catalog=$REGISTRY/product-catalog:${{ github.sha }} -n default
-          kubectl rollout status deployment/product-catalog -n default
+          kubectl set image deployment/product-catalog product-catalog=$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/product-catalog -n ${{ env.K8S_NAMESPACE }}
