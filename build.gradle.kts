@@ -87,4 +87,5 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("docker.host", "unix://" + System.getProperty("user.home") + "/.docker/run/docker.sock")
 }

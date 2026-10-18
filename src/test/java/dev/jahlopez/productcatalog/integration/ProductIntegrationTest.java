@@ -15,6 +15,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -28,9 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Enterprise integration test suite for the product catalog microservice.
- * Utilizes Testcontainers to spin up isolated, containerized instances of PostgreSQL
- * and Redis, guaranteeing 100% environment parity with production infrastructure
- * while verifying database persistence, Flyway migrations, and Redis caching behavior.
+ * Utilizes Testcontainers to spin up isolated, containerized instances of PostgreSQL,
+ * Redis, and Kafka, guaranteeing 100% environment parity with production infrastructure
+ * while verifying database persistence, Flyway migrations, Redis caching, and event publishing behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -62,8 +63,13 @@ class ProductIntegrationTest {
     @Container
     static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
+    /** Isolated Kafka container for event publishing integration testing. */
+    @Container
+    static final KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"));
+
     /**
-     * Dynamically registers Spring Boot datasource and Redis properties from the active Testcontainers instances.
+     * Dynamically registers Spring Boot datasource, Redis, and Kafka properties
+     * from the active Testcontainers instances.
      *
      * @param registry the dynamic property registry provided by Spring Test framework
      */
@@ -78,6 +84,9 @@ class ProductIntegrationTest {
         // Redis host and dynamic port mapping from Testcontainers
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+
+        // Kafka bootstrap servers property mapped from Testcontainers
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
     }
 
     @Autowired
@@ -152,7 +161,7 @@ class ProductIntegrationTest {
         requestDto.setPrice(new BigDecimal("129.99"));
         requestDto.setStockQuantity(50);
 
-        // Create product via service
+        // This call will also successfully publish a CREATED event to the Kafka container broker
         ProductResponseDto created = productService.createProduct(requestDto);
 
         // Act: First lookup loads the product from DB and populates the Redis cache
