@@ -13,6 +13,9 @@ java {
     }
 }
 
+// Override the Testcontainers version managed by Spring Boot.
+extra["testcontainers.version"] = "1.21.4"
+
 repositories {
     mavenCentral()
 }
@@ -32,7 +35,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     // Event Streaming: Apache Kafka
-    implementation("org.springframework.kafka:spring-kafka:3.2.4")
+    implementation("org.springframework.kafka:spring-kafka")
 
     // Database Migrations: Flyway
     implementation("org.flywaydb:flyway-core:10.17.0")
@@ -76,7 +79,7 @@ dependencies {
     testImplementation("com.h2database:h2")
 
     // Integration Testing: Testcontainers
-    testImplementation(platform("org.testcontainers:testcontainers-bom:1.20.5"))
+    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.4"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:kafka")
@@ -94,5 +97,4 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
-    systemProperty("docker.host", System.getenv("DOCKER_HOST") ?: ("unix://" + System.getProperty("user.home") + "/.docker/run/docker.sock"))
 }
