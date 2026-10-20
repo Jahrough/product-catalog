@@ -2,50 +2,54 @@ package dev.jahlopez.productcatalog.config;
 
 import dev.jahlopez.productcatalog.event.ProductEvent;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
- * Spring configuration class for setting up Kafka producer components.
- * This defines custom factories and templates specifically for producing ProductEvent messages.
+ * Spring configuration for Kafka producer components.
+ * Configures factories and templates for producing ProductEvent messages.
  */
 @Configuration
 public class KafkaProducerConfig {
 
-    // Spring Boot auto-configured Kafka properties (loaded from application.yml/properties)
     private final KafkaProperties kafkaProperties;
+    private final SslBundles sslBundles;
 
-    /**
-     * Constructor-based dependency injection for KafkaProperties.
-     *
-     * @param kafkaProperties properties automatically provided by Spring Boot Kafka auto-configuration
-     */
-    public KafkaProducerConfig(KafkaProperties kafkaProperties) {
+    public KafkaProducerConfig(KafkaProperties kafkaProperties, SslBundles sslBundles) {
         this.kafkaProperties = kafkaProperties;
+        this.sslBundles = sslBundles;
     }
 
     /**
-     * Creates a ProducerFactory bean responsible for producing Kafka producer instances.
-     * It builds the configuration map using Spring Boot's standard application properties.
+     * Creates a producer factory for String keys and ProductEvent values.
      *
-     * @return a ProducerFactory configured for String keys and ProductEvent values
+     * @return configured Kafka producer factory
      */
     @Bean
-    public ProducerFactory<String, ProductEvent> productEventProducerFactory() {
-        return new DefaultKafkaProducerFactory<>(kafkaProperties.buildProducerProperties(null));
+    public ProducerFactory<String, ProductEvent> producerFactory() {
+        // Build producer settings, including any configured SSL bundle properties.
+        Map<String, Object> properties = new HashMap<>(kafkaProperties.buildProducerProperties(sslBundles));
+
+        // Create the factory used to manage Kafka producer instances.
+        return new DefaultKafkaProducerFactory<>(properties);
     }
 
     /**
-     * Creates a KafkaTemplate bean which provides high-level convenience methods
-     * for sending messages to Kafka topics (e.g., kafkaTemplate.send(...)).
+     * Creates a KafkaTemplate for sending ProductEvent messages.
      *
-     * @return a KafkaTemplate bound to the productEventProducerFactory
+     * @param producerFactory configured producer factory
+     * @return Kafka template for ProductEvent messages
      */
     @Bean
-    public KafkaTemplate<String, ProductEvent> productEventKafkaTemplate() {
-        return new KafkaTemplate<>(productEventProducerFactory());
+    public KafkaTemplate<String, ProductEvent> kafkaTemplate(ProducerFactory<String, ProductEvent> producerFactory) {
+        // Reuse the configured factory for all KafkaTemplate operations.
+        return new KafkaTemplate<>(producerFactory);
     }
 }

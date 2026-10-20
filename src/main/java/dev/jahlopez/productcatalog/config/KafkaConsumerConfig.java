@@ -1,5 +1,6 @@
 package dev.jahlopez.productcatalog.config;
 
+import dev.jahlopez.productcatalog.event.ProductEvent;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,37 +12,48 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
+/**
+ * Configures Kafka listeners and failure recovery for product events.
+ *
+ * <p>After exhausting retries, failed events are published to the
+ * corresponding dead-letter topic ({@code <original-topic>.DLT}).
+ */
 @Configuration
 @EnableKafka
 public class KafkaConsumerConfig {
 
-    /**
-     * Configures the Kafka listener container factory with a Dead Letter Queue (DLQ) recoverer
-     * and a fixed backoff retry policy (e.g., 3 attempts with a 1-second delay).
-     */
-    @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> consumerFactory,
-            KafkaTemplate<String, Object> template) {
+    private static final long RETRY_INTERVAL_MS = 1_000L;
+    private static final long MAX_RETRIES = 3L;
+    private static final String DEAD_LETTER_TOPIC_SUFFIX = ".DLT";
 
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, ProductEvent> kafkaListenerContainerFactory(ConsumerFactory<String, ProductEvent> consumerFactory, KafkaTemplate<String, ProductEvent> kafkaTemplate) {
+        // Create the listener factory and configure its consumer.
+        var factory = new ConcurrentKafkaListenerContainerFactory<String, ProductEvent>();
         factory.setConsumerFactory(consumerFactory);
 
-        // Configure Dead Letter Publishing Recoverer to route failed messages to <topic>.DLT
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template,
-                (record, exception) -> new TopicPartition(record.topic() + ".DLT", record.partition()));
-
-        // Retry 3 times with a 1000ms (1 second) interval before sending to DLQ
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3));
-
-        // Optional: Add non-retryable exceptions if certain errors (like deserialization errors) should go straight to DLQ
-        // errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);
-
-        factory.setCommonErrorHandler(errorHandler);
-
-        // Use manual acknowledgment if needed (optional)
-        // factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        // Apply retry and dead-letter recovery behavior to listener failures.
+        factory.setCommonErrorHandler(createErrorHandler(kafkaTemplate));
 
         return factory;
+    }
+
+    private DefaultErrorHandler createErrorHandler(KafkaTemplate<String, ProductEvent> kafkaTemplate) {
+        // Publish messages to the dead-letter topic after retries are exhausted.
+        var recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, (record, exception) -> resolveDeadLetterTopic(record));
+
+        // Configure a fixed one-second delay between retry attempts.
+        var backOff = new FixedBackOff(RETRY_INTERVAL_MS, MAX_RETRIES);
+
+        // Retry failed deliveries before invoking the dead-letter recoverer.
+        return new DefaultErrorHandler(recoverer, backOff);
+    }
+
+    private TopicPartition resolveDeadLetterTopic(org.apache.kafka.clients.consumer.ConsumerRecord<?, ?> record) {
+        // Preserve the original topic name and append the dead-letter suffix.
+        String deadLetterTopic = record.topic() + DEAD_LETTER_TOPIC_SUFFIX;
+
+        // Preserve the original partition when routing the failed message.
+        return new TopicPartition(deadLetterTopic, record.partition());
     }
 }
