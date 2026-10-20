@@ -1,6 +1,11 @@
 server:
   port: 8080
 
+app:
+  kafka:
+    topic:
+      product-events: "product-events"
+
 spring:
   application:
     name: product-catalog
@@ -10,6 +15,9 @@ spring:
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
+
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
 
   data:
     redis:
@@ -23,11 +31,19 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-        spring.json.add.type.headers: false
+        spring.json.add.type.headers: true
+    consumer:
+      group-id: product-catalog-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "dev.jahlopez.productcatalog.*"
+        spring.json.value.default.type: "dev.jahlopez.productcatalog.event.ProductEvent"
 
   jpa:
     hibernate:
-      ddl-auto: validate # Use validate or none in production; let Flyway handle schema creation
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
