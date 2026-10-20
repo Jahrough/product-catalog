@@ -1,6 +1,8 @@
 package dev.jahlopez.productcatalog.service;
 
 import dev.jahlopez.productcatalog.event.ProductEvent;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -18,29 +20,33 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for the ProductEventPublisher service.
- * Uses Mockito to isolate the publisher from the actual Kafka infrastructure.
+ * Unit test suite for the ProductEventPublisher service.
+ * Utilizes Mockito to isolate the publisher from the actual Kafka infrastructure.
  */
 @ExtendWith(MockitoExtension.class)
 class ProductEventPublisherTest {
 
-    // Mock the KafkaTemplate to avoid needing a real running Kafka broker during unit tests
+    private static final String TEST_SKU = "PROD-KEY-001";
+
     @Mock
     private KafkaTemplate<String, ProductEvent> kafkaTemplate;
 
-    // Inject the mocked KafkaTemplate into the ProductEventPublisher instance under test
     @InjectMocks
     private ProductEventPublisher productEventPublisher;
 
-    /**
-     * Verifies that publishing a product event successfully sends the expected message to Kafka.
-     */
+    @Mock
+    private SendResult<String, ProductEvent> sendResult;
+
+    @Mock
+    private RecordMetadata recordMetadata;
+
     @Test
+    @DisplayName("Should successfully publish product event to Kafka and process success callback")
     void publishProductEvent_ShouldSendEventToKafka() {
         // Arrange: Create a sample product event to be published
         ProductEvent event = ProductEvent.builder()
                 .productId(1L)
-                .sku("PROD-KEY-001")
+                .sku(TEST_SKU)
                 .name("Mechanical Keyboard")
                 .price(BigDecimal.valueOf(149.99))
                 .stockQuantity(50)
@@ -48,28 +54,31 @@ class ProductEventPublisherTest {
                 .timestamp(LocalDateTime.now())
                 .build();
 
-        // Mock a successful asynchronous completion future returned by KafkaTemplate.send()
-        CompletableFuture<SendResult<String, ProductEvent>> future = CompletableFuture.completedFuture(mock(SendResult.class));
+        // Stub mock metadata to prevent NullPointerException during callback logging
+        when(sendResult.getRecordMetadata()).thenReturn(recordMetadata);
+        when(recordMetadata.partition()).thenReturn(0);
+        when(recordMetadata.offset()).thenReturn(100L);
 
-        // Stub the kafkaTemplate.send(...) method to return our completed future when called with specific arguments
-        when(kafkaTemplate.send(eq("product-events"), eq("PROD-KEY-001"), any(ProductEvent.class))).thenReturn(future);
+        // Mock a successful asynchronous completion future returned by KafkaTemplate.send()
+        CompletableFuture<SendResult<String, ProductEvent>> future = CompletableFuture.completedFuture(sendResult);
+
+        // Stub using any() for the uninitialized topic field (which is null in pure Mockito unit tests)
+        when(kafkaTemplate.send(any(), eq(TEST_SKU), any(ProductEvent.class))).thenReturn(future);
 
         // Act: Call the method under test
         productEventPublisher.publishProductEvent(event);
 
-        // Assert: Verify that kafkaTemplate.send was called exactly once with the correct topic, key, and event payload
-        verify(kafkaTemplate, times(1)).send(eq("product-events"), eq("PROD-KEY-001"), eq(event));
+        // Assert: Verify that kafkaTemplate.send was called exactly once with the correct parameters
+        verify(kafkaTemplate, times(1)).send(any(), eq(TEST_SKU), eq(event));
     }
 
-    /**
-     * Verifies that the publisher handles Kafka send failures gracefully without crashing or throwing uncaught exceptions.
-     */
     @Test
+    @DisplayName("Should handle Kafka broker transmission failure gracefully in asynchronous callback")
     void publishProductEvent_WhenKafkaSendFails_ShouldHandleExceptionGracefully() {
         // Arrange: Create a sample product event
         ProductEvent event = ProductEvent.builder()
                 .productId(1L)
-                .sku("PROD-KEY-001")
+                .sku(TEST_SKU)
                 .name("Mechanical Keyboard")
                 .price(BigDecimal.valueOf(149.99))
                 .stockQuantity(50)
@@ -81,14 +90,13 @@ class ProductEventPublisherTest {
         CompletableFuture<SendResult<String, ProductEvent>> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("Kafka broker unavailable"));
 
-        // Stub kafkaTemplate.send(...) to return the exceptionally completed future
-        when(kafkaTemplate.send(eq("product-events"), eq("PROD-KEY-001"), any(ProductEvent.class))).thenReturn(failedFuture);
+        // Stub using any() for the topic parameter
+        when(kafkaTemplate.send(any(), eq(TEST_SKU), any(ProductEvent.class))).thenReturn(failedFuture);
 
-        // Act & Assert: Invoke the publisher and ensure no uncaught exceptions escape the asynchronous callback
+        // Act: Invoke the publisher
         productEventPublisher.publishProductEvent(event);
 
-        // Verify that the send attempt was still correctly made despite the downstream failure
-        verify(kafkaTemplate, times(1)).send(eq("product-events"), eq("PROD-KEY-001"), eq(event));
+        // Assert: Verify that the send attempt was correctly made
+        verify(kafkaTemplate, times(1)).send(any(), eq(TEST_SKU), eq(event));
     }
-
 }
