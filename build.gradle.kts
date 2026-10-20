@@ -37,6 +37,9 @@ dependencies {
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
+    // Search Engine: Elasticsearch Integration
+    implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
+
     // API Documentation: OpenAPI / Swagger UI
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 
@@ -77,6 +80,7 @@ dependencies {
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:kafka")
     testImplementation("com.redis:testcontainers-redis:2.2.4")
+    testImplementation("org.testcontainers:elasticsearch")
 }
 
 // Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings
