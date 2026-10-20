@@ -15,6 +15,7 @@ public record ProductEvent(
         Long productId,
         String sku,
         String name,
+        String description,
         BigDecimal price,
         Integer stockQuantity,
         EventType eventType,
