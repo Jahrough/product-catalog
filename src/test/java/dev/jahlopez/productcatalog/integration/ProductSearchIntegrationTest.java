@@ -60,9 +60,8 @@ class ProductSearchIntegrationTest {
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
     @Container
-    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(
-            DockerImageName.parse("elasticsearch:8.9.0")
-    ).withEnv("discovery.type", "single-node")
+    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(DockerImageName.parse("elasticsearch:8.15.0"))
+            .withEnv("discovery.type", "single-node")
             .withEnv("xpack.security.enabled", "false");
 
     @DynamicPropertySource
@@ -78,7 +77,10 @@ class ProductSearchIntegrationTest {
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
 
+        // Point Spring Data Elasticsearch to the container's dynamically mapped HTTP endpoint.
         registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
+
+        // Allow additional time for Elasticsearch operations in containerized CI environments.
         registry.add("spring.elasticsearch.connection-timeout", () -> "10s");
         registry.add("spring.elasticsearch.socket-timeout", () -> "10s");
     }
@@ -136,19 +138,16 @@ class ProductSearchIntegrationTest {
         assertThat(created).isNotNull();
 
         // Assert: Use Awaitility to wait until the asynchronous Elasticsearch consumer indexes the document
-        await().atMost(Duration.ofSeconds(15))
-                .pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> {
-                    long count = productSearchRepository.count();
-                    assertThat(count).isGreaterThan(0);
+        await().atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
+                long count = productSearchRepository.count();
+                assertThat(count).isGreaterThan(0);
 
-                    Page<ProductDocument> results = productSearchRepository.findByNameContainingOrDescriptionContaining(
-                            "Mechanical", "Mechanical", PageRequest.of(0, 10)
-                    );
-                    assertThat(results).isNotNull();
-                    assertThat(results.getContent()).hasSize(1);
-                    assertThat(results.getContent().get(0).getSku()).isEqualTo(TEST_SKU);
-                    assertThat(results.getContent().get(0).getName()).contains(TEST_PRODUCT_NAME);
+                Page<ProductDocument> results = productSearchRepository.findByNameContainingOrDescriptionContaining("Mechanical", "Mechanical", PageRequest.of(0, 10));
+
+                assertThat(results.getContent()).hasSize(1).first().satisfies(document -> {
+                    assertThat(document.getSku()).isEqualTo(TEST_SKU);
+                    assertThat(document.getName()).contains(TEST_PRODUCT_NAME);
                 });
+        });
     }
 }

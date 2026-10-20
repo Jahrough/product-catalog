@@ -10,10 +10,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.hamcrest.Matchers.containsString;
@@ -23,68 +24,97 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Enterprise integration test suite for verifying Spring Boot Actuator health endpoints
- * and Micrometer Prometheus metrics exports across PostgreSQL, Redis, and Kafka infrastructure.
+ * Integration tests for Spring Boot Actuator health checks, Kubernetes
+ * health probes, and Micrometer Prometheus metrics.
+ *
+ * Testcontainers provides isolated instances of the external services so
+ * the tests can verify health indicators against real infrastructure.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
 class ActuatorHealthIntegrationTest {
 
-    // Environment-agnostic Docker socket discovery fallback for macOS / Linux
-    static {
-        if (System.getenv("DOCKER_HOST") == null) {
-            java.io.File standardSocket = new java.io.File("/var/run/docker.sock");
-            java.io.File desktopSocket = new java.io.File(System.getProperty("user.home") + "/.docker/run/docker.sock");
-
-            if (desktopSocket.exists()) {
-                System.setProperty("docker.host", "unix://" + desktopSocket.getAbsolutePath());
-            } else if (standardSocket.exists()) {
-                System.setProperty("docker.host", "unix:///var/run/docker.sock");
-            }
-        }
-    }
-
+    /*
+     * PostgreSQL backs the application's relational persistence layer.
+     * Testcontainers assigns a host port and creates the test database.
+     */
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
+    static final PostgreSQLContainer<?> postgres =
+            new PostgreSQLContainer<>("postgres:15-alpine")
+                    .withDatabaseName("testdb")
+                    .withUsername("test")
+                    .withPassword("test");
 
+    /*
+     * Redis supports the application's cache and its Actuator health check.
+     */
     @Container
-    static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
+    static final RedisContainer redis =
+            new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
+    /*
+     * Kafka supplies the application's message broker dependency.
+     * It is included because the full Spring application context may
+     * initialize Kafka-related beans during startup.
+     */
     @Container
-    static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
+    static final ConfluentKafkaContainer kafka =
+            new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
+    /*
+     * Elasticsearch supports search-related beans and its Actuator
+     * health indicator. Security is disabled for this isolated test
+     * environment so the application can connect over HTTP without
+     * authentication or TLS configuration.
+     */
+    @Container
+    static final ElasticsearchContainer elasticsearch =
+            new ElasticsearchContainer(
+                    DockerImageName.parse(
+                            "docker.elastic.co/elasticsearch/elasticsearch:8.15.0"))
+                    .withEnv("discovery.type", "single-node")
+                    .withEnv("xpack.security.enabled", "false");
+
+    /**
+     * Overrides application connection settings with endpoints provided
+     * by the running containers. Container ports may be dynamically mapped,
+     * so tests should use the connection details exposed by Testcontainers
+     * rather than hard-coded localhost ports.
+     */
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
+        // PostgreSQL connection and schema migration.
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> true);
 
+        // Redis connection.
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
 
+        // Kafka broker and Elasticsearch endpoint.
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
     }
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    @DisplayName("Should report status UP on /actuator/health endpoint with component health details")
+    @DisplayName("Should report UP when application health indicators are healthy")
     void shouldReturnHealthStatusUp() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.components.db.status").value("UP"))
-                .andExpect(jsonPath("$.components.redis.status").value("UP"));
+                .andExpect(jsonPath("$.components.redis.status").value("UP"))
+                .andExpect(jsonPath("$.components.elasticsearch.status").value("UP"));
     }
 
     @Test
-    @DisplayName("Should expose Prometheus metrics scraping endpoint on /actuator/prometheus in text format")
+    @DisplayName("Should expose Prometheus metrics in the expected text format")
     void shouldExposePrometheusMetricsEndpoint() throws Exception {
         mockMvc.perform(get("/actuator/prometheus"))
                 .andExpect(status().isOk())
@@ -93,12 +123,14 @@ class ActuatorHealthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should expose Kubernetes liveness and readiness probe endpoints")
+    @DisplayName("Should report UP for Kubernetes liveness and readiness probes")
     void shouldExposeKubernetesProbes() throws Exception {
+        // Liveness indicates whether the application process is functioning.
         mockMvc.perform(get("/actuator/health/liveness"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
 
+        // Readiness indicates whether the application is ready to receive traffic.
         mockMvc.perform(get("/actuator/health/readiness"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));

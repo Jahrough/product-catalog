@@ -15,23 +15,25 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import java.io.File;
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Enterprise integration test suite for the product catalog microservice.
- * Utilizes Testcontainers to spin up isolated, containerized instances of PostgreSQL,
- * Redis, and Kafka, guaranteeing 100% environment parity with production infrastructure
- * while verifying database persistence, Flyway migrations, Redis caching, and event publishing behavior.
+ * Integration test suite for the product catalog microservice.
+ *
+ * Uses Testcontainers to provision isolated PostgreSQL, Redis, Kafka,
+ * and Elasticsearch instances, enabling integration tests against real
+ * infrastructure dependencies. Verifies database persistence, Flyway
+ * migrations, Redis caching, and Kafka event publishing behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -69,6 +71,13 @@ class ProductIntegrationTest {
     @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
+    /** Isolated Elasticsearch container for event publishing integration testing. */
+    @Container
+    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.15.0")
+            .withEnv("xpack.security.enabled", "false")
+            .withEnv("xpack.security.transport.ssl.enabled", "false")
+            .withEnv("xpack.security.http.ssl.enabled", "false");
+
     /**
      * Dynamically registers Spring Boot datasource, Redis, and Kafka properties
      * from the active Testcontainers instances.
@@ -77,18 +86,18 @@ class ProductIntegrationTest {
      */
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL datasource properties mapped from Testcontainers
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> true);
 
-        // Redis host and dynamic port mapping from Testcontainers
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
 
-        // Kafka bootstrap servers property mapped from Testcontainers
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+
+        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
+        registry.add("spring.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
     }
 
     @Autowired

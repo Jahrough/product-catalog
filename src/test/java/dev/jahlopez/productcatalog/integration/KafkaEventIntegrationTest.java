@@ -13,82 +13,65 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-/**
- * Enterprise integration test suite for verifying asynchronous event publishing to Apache Kafka.
- * <p>Utilizes Testcontainers to spin up isolated instances of PostgreSQL, Redis, and Kafka,
- * capturing published events via a dedicated test Kafka listener bean and Awaitility synchronization.</p>
- */
 @SpringBootTest
 @Testcontainers
+@Import(KafkaEventIntegrationTest.TestKafkaConfiguration.class)
 class KafkaEventIntegrationTest {
 
-    // Environment-agnostic Docker socket discovery fallback for macOS / Linux environments
-    static {
-        if (System.getenv("DOCKER_HOST") == null) {
-            java.io.File standardSocket = new java.io.File("/var/run/docker.sock");
-            java.io.File desktopSocket = new java.io.File(System.getProperty("user.home") + "/.docker/run/docker.sock");
+    private static final Duration EVENT_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration POLL_INTERVAL = Duration.ofMillis(200);
 
-            if (desktopSocket.exists()) {
-                System.setProperty("docker.host", "unix://" + desktopSocket.getAbsolutePath());
-            } else if (standardSocket.exists()) {
-                System.setProperty("docker.host", "unix:///var/run/docker.sock");
-            }
-        }
-    }
-
-    /** Isolated PostgreSQL container instance (Singleton pattern) for database persistence testing. */
     @Container
     static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")
             .withDatabaseName("testdb")
             .withUsername("test")
             .withPassword("test");
 
-    /** Isolated Redis container instance (Singleton pattern) for caching layer testing. */
     @Container
     static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
-    /** Isolated Apache Kafka container instance (Singleton pattern) for event-driven messaging testing. */
     @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
-    /**
-     * Dynamically registers test container connection properties into the Spring Environment,
-     * overriding application configuration parameters at runtime.
-     *
-     * @registry the dynamic property registry
-     */
+    @Container
+    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.15.0"))
+            .withEnv("discovery.type", "single-node")
+            .withEnv("xpack.security.enabled", "false");
+
     @DynamicPropertySource
-    static void overrideProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL and Flyway migration configurations
+    static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> true);
 
-        // Redis cache connection configurations
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
 
-        // Apache Kafka broker and consumer configuration overrides
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
+
+        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
     }
 
     @Autowired
@@ -100,10 +83,6 @@ class KafkaEventIntegrationTest {
     @Autowired
     private TestKafkaListener testKafkaListener;
 
-    /**
-     * Resets database state and clears captured Kafka messages before each individual test execution
-     * to ensure strict test isolation.
-     */
     @BeforeEach
     void setUp() {
         productRepository.deleteAll();
@@ -112,86 +91,87 @@ class KafkaEventIntegrationTest {
     }
 
     @Test
-    @DisplayName("Should publish product created event to Kafka container topic")
+    @DisplayName("Should publish a product-created event to Kafka")
     void shouldPublishProductCreatedEvent() {
-        // Arrange: Prepare valid product request payload
-        ProductRequestDto requestDto = createSampleRequest("KAFKA-PROD-01", "Stream Deck", new BigDecimal("149.99"));
+        ProductRequestDto request = createSampleRequest("KAFKA-PROD-01", "Stream Deck", new BigDecimal("149.99"));
 
-        // Act: Execute business logic to create product and trigger asynchronous event publication
-        ProductResponseDto created = productService.createProduct(requestDto);
+        ProductResponseDto created = productService.createProduct(request);
 
-        // Assert: Use Awaitility to poll asynchronously until the message is intercepted by the test consumer
-        await().atMost(Duration.ofSeconds(15))
-                .pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> {
-                    ConsumerRecord<String, Object> receivedMessage = testKafkaListener.getMessages().peek();
-                    assertThat(receivedMessage).as("Kafka event must be published").isNotNull();
-                    assertThat(receivedMessage.key()).isEqualTo(requestDto.getSku());
-                    assertThat(receivedMessage.value()).isNotNull();
-                });
+        assertThat(created).isNotNull();
+        assertThat(created.getId()).isNotNull();
+        assertThat(created.getSku()).isEqualTo(request.getSku());
+
+        ConsumerRecord<String, Object> record = awaitRecordForSku(request.getSku());
+
+        assertThat(record.key()).isEqualTo(request.getSku());
+        assertThat(record.value()).as("The Kafka event payload must not be null").isNotNull();
     }
 
     @Test
-    @DisplayName("Should publish product deleted event to Kafka container topic")
+    @DisplayName("Should publish a product-deleted event to Kafka")
     void shouldPublishProductDeletedEvent() {
-        // Arrange: Create initial product record to establish state for deletion
-        ProductRequestDto initialRequest = createSampleRequest("KAFKA-PROD-03", "Studio Microphone", new BigDecimal("99.99"));
-        ProductResponseDto created = productService.createProduct(initialRequest);
+        ProductRequestDto request = createSampleRequest("KAFKA-PROD-03", "Studio Microphone", new BigDecimal("99.99"));
+        ProductResponseDto created = productService.createProduct(request);
 
-        // Wait for the initial creation event to clear from the queue so we can assert on deletion explicitly
-        await().atMost(Duration.ofSeconds(10))
-                .until(() -> !testKafkaListener.getMessages().isEmpty());
-        testKafkaListener.clearQueue();
+        assertThat(created).isNotNull();
+        assertThat(created.getId()).isNotNull();
 
-        // Act: Delete the product to trigger the product deletion event
+        // Consume the creation event before triggering deletion.
+        ConsumerRecord<String, Object> creationRecord = awaitRecordForSku(request.getSku());
+        assertThat(creationRecord.value()).isNotNull();
+
         productService.deleteProduct(created.getId());
 
-        // Assert: Use Awaitility to wait for deletion event publication and verify key matching
-        await().atMost(Duration.ofSeconds(15))
-                .pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> {
-                    ConsumerRecord<String, Object> receivedMessage = testKafkaListener.getMessages().peek();
-                    assertThat(receivedMessage).as("Kafka delete event must be published").isNotNull();
-                    assertThat(receivedMessage.key()).isEqualTo(initialRequest.getSku());
-                    assertThat(receivedMessage.value()).isNotNull();
+        // Wait for the next matching event, which should be the deletion event.
+        ConsumerRecord<String, Object> deletionRecord = awaitRecordForSku(request.getSku());
+
+        assertThat(deletionRecord.key()).isEqualTo(request.getSku());
+        assertThat(deletionRecord.value()).as("The product-deleted event payload must not be null").isNotNull();
+    }
+
+    private ConsumerRecord<String, Object> awaitRecordForSku(String sku) {
+        AtomicReference<ConsumerRecord<String, Object>> matchingRecord = new AtomicReference<>();
+
+        await().atMost(EVENT_TIMEOUT)
+                .pollInterval(POLL_INTERVAL)
+                .until(() -> {
+                    ConsumerRecord<String, Object> record;
+
+                    while ((record = testKafkaListener.pollMessage()) != null) {
+                        if (sku.equals(record.key())) {
+                            matchingRecord.set(record);
+                            return true;
+                        }
+                    }
+
+                    return false;
                 });
+
+        return matchingRecord.get();
     }
 
-    /**
-     * Helper factory method to build a fully valid {@link ProductRequestDto} baseline for testing.
-     *
-     * @param sku   the unique stock keeping unit identifier
-     * @param name  the name of the product
-     * @param price the monetary price of the product
-     * @return configured product request DTO instance
-     */
     private ProductRequestDto createSampleRequest(String sku, String name, BigDecimal price) {
-        ProductRequestDto requestDto = new ProductRequestDto();
-        requestDto.setSku(sku);
-        requestDto.setName(name);
-        requestDto.setDescription("High performance broadcasting peripheral");
-        requestDto.setPrice(price);
-        requestDto.setStockQuantity(25);
-        return requestDto;
+        ProductRequestDto request = new ProductRequestDto();
+        request.setSku(sku);
+        request.setName(name);
+        request.setDescription("High-performance broadcasting peripheral");
+        request.setPrice(price);
+        request.setStockQuantity(25);
+
+        return request;
     }
 
-    /**
-     * Test-specific configuration container defining beans required exclusively for integration verification.
-     */
-    @TestConfiguration
+    @TestConfiguration(proxyBeanMethods = false)
     static class TestKafkaConfiguration {
 
         @Bean
-        public TestKafkaListener testKafkaListener() {
+        TestKafkaListener testKafkaListener() {
             return new TestKafkaListener();
         }
     }
 
-    /**
-     * Dedicated test Kafka listener component that intercepts published records on the `product-events` topic
-     * and queues them in a thread-safe structure for assertions.
-     */
     static class TestKafkaListener {
+
         private final BlockingQueue<ConsumerRecord<String, Object>> messages = new LinkedBlockingQueue<>();
 
         @KafkaListener(topics = "product-events", groupId = "test-assertion-group")
@@ -199,19 +179,11 @@ class KafkaEventIntegrationTest {
             messages.add(record);
         }
 
-        /**
-         * Retrieves the thread-safe queue of intercepted Kafka consumer records.
-         *
-         * @return blocking queue containing consumer records
-         */
-        public BlockingQueue<ConsumerRecord<String, Object>> getMessages() {
-            return messages;
+        ConsumerRecord<String, Object> pollMessage() {
+            return messages.poll();
         }
 
-        /**
-         * Clears all recorded messages from the queue.
-         */
-        public void clearQueue() {
+        void clearQueue() {
             messages.clear();
         }
     }

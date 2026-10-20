@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -32,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Testcontainers(disabledWithoutDocker = true)
 @DataJpaTest
+@ActiveProfiles("test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(JpaAuditingConfig.class)
 class ProductRepositoryTest {
@@ -67,6 +69,13 @@ class ProductRepositoryTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+
+        // Explicitly configure Flyway to use the same PostgreSQL container.
+        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.flyway.user", POSTGRES::getUsername);
+        registry.add("spring.flyway.password", POSTGRES::getPassword);
+        registry.add("spring.flyway.driver-class-name", () -> "org.postgresql.Driver");
     }
 
     /** JPA test utility for persisting entities and flushing changes. */
@@ -93,6 +102,7 @@ class ProductRepositoryTest {
                 .build();
 
         entityManager.persistAndFlush(product);
+        entityManager.clear();
 
         // Act
         var result = productRepository.findBySku(EXISTING_SKU);
@@ -104,6 +114,7 @@ class ProductRepositoryTest {
                 .satisfies(found -> {
                     assertThat(found.getSku()).isEqualTo(EXISTING_SKU);
                     assertThat(found.getName()).isEqualTo(PRODUCT_NAME);
+                    assertThat(found.getPrice()).isEqualByComparingTo(PRODUCT_PRICE);
                 });
     }
 
