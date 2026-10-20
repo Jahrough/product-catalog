@@ -13,22 +13,18 @@ java {
     }
 }
 
-// Override the Testcontainers version managed by Spring Boot.
+// Override Testcontainers version managed by Spring Boot.
 extra["testcontainers.version"] = "1.21.4"
+
+val mapstructVersion = "1.5.5.Final"
+val flywayVersion = "10.17.0"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // Security Overrides
-    constraints {
-        implementation("org.apache.commons:commons-lang3:3.18.0") {
-            because("Remediate CVE-2025-48924 transitive vulnerability")
-        }
-    }
-
-    // Spring Boot: Web, Persistence, and Validation
+    // Spring Boot Core: Web, Data JPA, Validation
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -38,8 +34,8 @@ dependencies {
     implementation("org.springframework.kafka:spring-kafka")
 
     // Database Migrations: Flyway
-    implementation("org.flywaydb:flyway-core:10.17.0")
-    implementation("org.flywaydb:flyway-database-postgresql:10.17.0")
+    implementation("org.flywaydb:flyway-core:$flywayVersion")
+    implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
     // API Documentation: OpenAPI / Swagger UI
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
@@ -48,7 +44,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // Enterprise Observability: Actuator, Metrics (Prometheus), Distributed Tracing (OpenTelemetry), and Structured JSON Logging
+    // Enterprise Observability: Actuator, Metrics, Tracing, Logging
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
@@ -56,12 +52,12 @@ dependencies {
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     // Object Mapping: MapStruct
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
+    implementation("org.mapstruct:mapstruct:$mapstructVersion")
 
-    // Boilerplate Reduction: Lombok and MapStruct Binding (Order in annotationProcessor matters)
+    // Boilerplate Reduction: Lombok & MapStruct Binding
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    annotationProcessor("org.mapstruct:mapstruct-processor:$mapstructVersion")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
     // Test Scope Lombok Support
@@ -77,20 +73,25 @@ dependencies {
     testImplementation("com.h2database:h2")
 
     // Integration Testing: Testcontainers
-    testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.4"))
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:kafka")
     testImplementation("com.redis:testcontainers-redis:2.2.4")
 }
 
-tasks.withType<JavaCompile>().configureEach {
+// Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings
+tasks.named<JavaCompile>("compileJava") {
     options.compilerArgs.addAll(
         listOf(
             "-Amapstruct.defaultComponentModel=spring",
-            "-Amapstruct.unmappedTargetPolicy=IGNORE"
+            "-Amapstruct.unmappedTargetPolicy=WARN"
         )
     )
+}
+
+// Global compiler options
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-Xlint:deprecation")
 }
 
 tasks.test {
