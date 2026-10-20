@@ -69,8 +69,6 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok")
 
     // Testing: JUnit 5, Spring Boot, and Embedded Kafka
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
