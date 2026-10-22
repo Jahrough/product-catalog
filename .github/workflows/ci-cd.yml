@@ -11,8 +11,6 @@ env:
   AWS_REGION: us-east-1
   AWS_ROLE_ARN: arn:aws:iam::YOUR_ACTUAL_AWS_ACCOUNT_ID:role/GitHubActionsEKSDeploymentRole
   ECR_REPOSITORY: product-catalog
-  EKS_CLUSTER_NAME: product-catalog-cluster
-  K8S_NAMESPACE: default
 
 permissions:
   contents: read
@@ -95,36 +93,3 @@ jobs:
         run: |
           docker build -t $REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }} -t $REGISTRY/${{ env.ECR_REPOSITORY }}:latest .
           docker push $REGISTRY/${{ env.ECR_REPOSITORY }} --all-tags
-
-  deploy:
-    name: Deploy to AWS EKS
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write # Required for AWS OIDC
-      contents: read
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Update Kubeconfig for EKS
-        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
-
-      - name: Deploy Manifests and Rollout Update
-        env:
-          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-        run: |
-          envsubst < k8s/product-catalog.yaml | kubectl apply -f -
-          kubectl apply -f k8s/network-policy.yaml
-          kubectl rollout status deployment/product-catalog -n ${{ env.K8S_NAMESPACE }}
