@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    id("jacoco")
     id("org.springframework.boot") version "3.2.4"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -75,6 +76,10 @@ dependencies {
     testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
 }
 
+jacoco {
+    toolVersion = "0.8.11"
+}
+
 // Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings
 tasks.named<JavaCompile>("compileJava") {
     options.compilerArgs.addAll(
@@ -92,4 +97,13 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport) // Automatically generate coverage report after tests run
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
 }
