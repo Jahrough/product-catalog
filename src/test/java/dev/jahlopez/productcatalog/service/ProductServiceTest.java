@@ -1,9 +1,12 @@
 package dev.jahlopez.productcatalog.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.Product;
+import dev.jahlopez.productcatalog.model.OutboxEvent;
+import dev.jahlopez.productcatalog.repository.OutboxRepository;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -23,7 +26,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit test suite for {@link ProductService}.
- * Utilizes Mockito to isolate business logic execution from underlying persistence, caching, and messaging layers.
+ * Utilizes Mockito to isolate business logic execution from underlying persistence, caching, and outbox event logging.
  */
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -32,13 +35,17 @@ class ProductServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    // Mock the outbox repository to isolate transactional outbox event logging
+    @Mock
+    private OutboxRepository outboxRepository;
+
     // Mock the mapper to isolate entity-to-DTO conversion logic
     @Mock
     private ProductMapper productMapper;
 
-    // Mock the event publisher to isolate asynchronous Kafka messaging during service tests
+    // Mock the ObjectMapper to isolate JSON serialization behavior during service tests
     @Mock
-    private ProductEventPublisher productEventPublisher;
+    private ObjectMapper objectMapper;
 
     // Inject the mocked dependencies into the ProductService instance under test
     @InjectMocks
@@ -143,10 +150,10 @@ class ProductServiceTest {
 
     /**
      * Verifies that creating a new product maps the request DTO to an entity, saves it via the repository,
-     * triggers an event publication, and returns the populated response DTO.
+     * logs an outbox event intent, and returns the populated response DTO.
      */
     @Test
-    void createProduct_ShouldSaveAndReturnProduct() {
+    void createProduct_ShouldSaveAndReturnProduct() throws Exception {
         // Arrange: Set up incoming request DTO and expected intermediate/output objects
         ProductRequestDto requestDto = new ProductRequestDto();
         requestDto.setSku("PROD-WIR-001");
@@ -181,11 +188,12 @@ class ProductServiceTest {
                 .stockQuantity(requestDto.getStockQuantity())
                 .build();
 
-        // Stub mapper, repository, and event publisher behaviors
+        // Stub mapper, repository, object mapper, and outbox repository behaviors
         when(productMapper.toEntity(any(ProductRequestDto.class))).thenReturn(productToEntity);
         when(productRepository.save(any(Product.class))).thenReturn(savedProduct);
         when(productMapper.toResponseDto(savedProduct)).thenReturn(responseDto);
-        doNothing().when(productEventPublisher).publishProductEvent(any());
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"eventId\":\"123-abc\"}");
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(new OutboxEvent());
 
         // Act: Execute create product operation
         ProductResponseDto result = productService.createProduct(requestDto);
@@ -199,15 +207,16 @@ class ProductServiceTest {
         verify(productMapper, times(1)).toEntity(any(ProductRequestDto.class));
         verify(productRepository, times(1)).save(any(Product.class));
         verify(productMapper, times(1)).toResponseDto(savedProduct);
-        verify(productEventPublisher, times(1)).publishProductEvent(any());
+        verify(objectMapper, times(1)).writeValueAsString(any());
+        verify(outboxRepository, times(1)).save(any(OutboxEvent.class));
     }
 
     /**
      * Verifies that deleting an existing product successfully removes the entity from the database,
-     * triggers the publication of a lifecycle deletion event to Kafka, and executes all expected repository interactions.
+     * logs a deletion event intent to the outbox table, and executes all expected repository interactions.
      */
     @Test
-    void deleteProduct_WhenProductExists_ShouldDeleteAndPublishEvent() {
+    void deleteProduct_WhenProductExists_ShouldDeleteAndSaveOutboxEvent() throws Exception {
         // Arrange: Prepare a sample product entity simulating an existing record in the database
         Long productId = 1L;
         Product product = Product.builder()
@@ -218,17 +227,19 @@ class ProductServiceTest {
                 .stockQuantity(100)
                 .build();
 
-        // Stub the repository lookup to return our sample product, and mock the delete and event publishing calls
+        // Stub repository, object mapper, and outbox repository behaviors
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
         doNothing().when(productRepository).delete(product);
-        doNothing().when(productEventPublisher).publishProductEvent(any());
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"eventId\":\"456-def\"}");
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(new OutboxEvent());
 
-        // Act: Invoke the service method responsible for product deletion and event broadcasting
+        // Act: Invoke the service method responsible for product deletion and outbox logging
         productService.deleteProduct(productId);
 
-        // Assert: Verify that the product was found, explicitly deleted through the repository, and an event was dispatched
+        // Assert: Verify that the product was found, explicitly deleted, and an outbox event was logged
         verify(productRepository, times(1)).findById(productId);
         verify(productRepository, times(1)).delete(product);
-        verify(productEventPublisher, times(1)).publishProductEvent(any());
+        verify(objectMapper, times(1)).writeValueAsString(any());
+        verify(outboxRepository, times(1)).save(any(OutboxEvent.class));
     }
 }

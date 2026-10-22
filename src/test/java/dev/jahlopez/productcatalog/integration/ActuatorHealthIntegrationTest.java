@@ -13,7 +13,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.hamcrest.Matchers.containsString;
@@ -52,15 +51,6 @@ class ActuatorHealthIntegrationTest {
     static final RedisContainer redis =
             new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
-    /*
-     * Kafka supplies the application's message broker dependency.
-     * It is included because the full Spring application context may
-     * initialize Kafka-related beans during startup.
-     */
-    @Container
-    static final ConfluentKafkaContainer kafka =
-            new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
-
     /**
      * Overrides application connection settings with endpoints provided
      * by the running containers. Container ports may be dynamically mapped,
@@ -78,9 +68,6 @@ class ActuatorHealthIntegrationTest {
         // Redis connection.
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-
-        // Kafka broker.
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
     }
 
     @Autowired

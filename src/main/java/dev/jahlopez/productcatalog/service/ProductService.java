@@ -1,13 +1,17 @@
 package dev.jahlopez.productcatalog.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.event.ProductEvent;
 import dev.jahlopez.productcatalog.mapper.ProductMapper;
+import dev.jahlopez.productcatalog.model.OutboxEvent;
 import dev.jahlopez.productcatalog.model.Product;
+import dev.jahlopez.productcatalog.repository.OutboxRepository;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -15,22 +19,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Service component responsible for orchestrating product catalog business logic,
- * database persistence transactions, type-safe object mapping, Redis caching, and Kafka event broadcasting.
+ * database persistence transactions, type-safe object mapping, Redis caching, and transactional outbox event logging.
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final OutboxRepository outboxRepository;
     private final ProductMapper productMapper;
-    private final ProductEventPublisher productEventPublisher;
+    private final ObjectMapper objectMapper;
 
     /**
      * Creates and persists a new product record in the database.
-     * Broadcasts a CREATED event to Kafka and evicts all cache tiers to maintain consistency.
+     * Transactionally logs a CREATED event intent to the outbox table and evicts all cache tiers to maintain consistency.
      *
      * @param requestDto the product creation payload containing SKU, name, price, etc.
      * @return the saved product response DTO
@@ -41,8 +48,9 @@ public class ProductService {
         Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
 
-        // Publish CREATED event to Kafka
-        productEventPublisher.publishProductEvent(ProductEvent.builder()
+        // Construct the domain event with metadata
+        ProductEvent event = ProductEvent.builder()
+                .eventId(UUID.randomUUID())
                 .productId(savedProduct.getId())
                 .sku(savedProduct.getSku())
                 .name(savedProduct.getName())
@@ -50,7 +58,10 @@ public class ProductService {
                 .stockQuantity(savedProduct.getStockQuantity())
                 .eventType(ProductEvent.EventType.CREATED)
                 .timestamp(LocalDateTime.now())
-                .build());
+                .build();
+
+        // Transactionally save event intent to the outbox table
+        saveOutboxEvent(savedProduct.getId().toString(), "CREATED", event);
 
         return productMapper.toResponseDto(savedProduct);
     }
@@ -103,7 +114,7 @@ public class ProductService {
 
     /**
      * Deletes a product record by its database primary key ID.
-     * Broadcasts a DELETED event to Kafka and evicts all cache tiers to ensure cache consistency.
+     * Transactionally logs a DELETED event intent to the outbox table and evicts all cache tiers to ensure cache consistency.
      *
      * @param id the database primary key identifier of the product to delete
      * @throws EntityNotFoundException if no product exists with the given ID
@@ -116,8 +127,9 @@ public class ProductService {
 
         productRepository.delete(product);
 
-        // Publish DELETED event to Kafka
-        productEventPublisher.publishProductEvent(ProductEvent.builder()
+        // Construct the domain event with metadata
+        ProductEvent event = ProductEvent.builder()
+                .eventId(UUID.randomUUID())
                 .productId(product.getId())
                 .sku(product.getSku())
                 .name(product.getName())
@@ -125,6 +137,30 @@ public class ProductService {
                 .stockQuantity(product.getStockQuantity())
                 .eventType(ProductEvent.EventType.DELETED)
                 .timestamp(LocalDateTime.now())
-                .build());
+                .build();
+
+        // Transactionally save event intent to the outbox table
+        saveOutboxEvent(product.getId().toString(), "DELETED", event);
+    }
+
+    /**
+     * Helper method to serialize a domain event and persist it into the outbox table.
+     */
+    private void saveOutboxEvent(String aggregateId, String eventType, ProductEvent event) {
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateType("PRODUCT")
+                    .aggregateId(aggregateId)
+                    .eventType(eventType)
+                    .payload(payload)
+                    .processed(false)
+                    .build();
+
+            outboxRepository.save(outboxEvent);
+        } catch (Exception e) {
+            log.error("Failed to serialize and save outbox event for aggregateId: {}", aggregateId, e);
+            throw new RuntimeException("Failed to persist outbox event", e);
+        }
     }
 }

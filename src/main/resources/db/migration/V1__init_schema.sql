@@ -14,14 +14,28 @@ CREATE TABLE products (
 CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_name ON products(name);
 
--- Optional: PostgreSQL trigger function to automatically update 'updated_at' timestamp on row modifications
+-- Create outbox table for the Transactional Outbox pattern (reliable event publishing via CDC)
+CREATE TABLE outbox (
+    id BIGSERIAL PRIMARY KEY,
+    aggregate_type VARCHAR(100) NOT NULL,
+    aggregate_id VARCHAR(100) NOT NULL,
+    event_type VARCHAR(100) NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- Index to optimize polling or CDC change tracking for unprocessed events
+CREATE INDEX idx_outbox_processed_created ON outbox(processed, created_at);
+
+-- PostgreSQL trigger function to automatically update 'updated_at' timestamp on row modifications
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_products_modtime
     BEFORE UPDATE ON products

@@ -4,6 +4,8 @@ import com.redis.testcontainers.RedisContainer;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.model.Product;
+import dev.jahlopez.productcatalog.model.OutboxEvent;
+import dev.jahlopez.productcatalog.repository.OutboxRepository;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
 import dev.jahlopez.productcatalog.service.ProductService;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +17,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -27,12 +28,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration test suite for the product catalog microservice.
+ * Integration test suite for the product catalog write-side microservice.
  *
- * Uses Testcontainers to provision isolated PostgreSQL, Redis, and Kafka
+ * Uses Testcontainers to provision isolated PostgreSQL and Redis
  * instances, enabling integration tests against real infrastructure dependencies.
- * Verifies database persistence, Flyway migrations, Redis caching, and Kafka
- * event publishing behavior.
+ * Verifies database persistence, Flyway migrations, Redis caching, and Transactional Outbox event logging behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -66,12 +66,8 @@ class ProductIntegrationTest {
     @Container
     static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
-    /** Isolated Kafka container for event publishing integration testing. */
-    @Container
-    static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
-
     /**
-     * Dynamically registers Spring Boot datasource, Redis, and Kafka properties
+     * Dynamically registers Spring Boot datasource and Redis properties
      * from the active Testcontainers instances.
      *
      * @param registry the dynamic property registry provided by Spring Test framework
@@ -85,12 +81,13 @@ class ProductIntegrationTest {
 
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
     }
 
     @Autowired
     private ProductRepository productRepository;
+
+    @Autowired
+    private OutboxRepository outboxRepository;
 
     @Autowired
     private ProductService productService;
@@ -99,11 +96,12 @@ class ProductIntegrationTest {
     private CacheManager cacheManager;
 
     /**
-     * Resets database state and flushes all Redis caches before each individual test execution.
+     * Resets database state, clears outbox table, and flushes all Redis caches before each individual test execution.
      */
     @BeforeEach
     void setUp() {
-        // Purge database table content to guarantee test isolation
+        // Purge database table contents to guarantee test isolation
+        outboxRepository.deleteAll();
         productRepository.deleteAll();
         productRepository.flush();
 
@@ -161,7 +159,7 @@ class ProductIntegrationTest {
         requestDto.setPrice(new BigDecimal("129.99"));
         requestDto.setStockQuantity(50);
 
-        // This call will also successfully publish a CREATED event to the Kafka container broker
+        // This call will also transactionally log a CREATED event intent into the outbox table
         ProductResponseDto created = productService.createProduct(requestDto);
 
         // Act: First lookup loads the product from DB and populates the Redis cache
@@ -171,6 +169,11 @@ class ProductIntegrationTest {
         assertThat(fetchedFirst).isNotNull();
         assertThat(fetchedFirst.getId()).isEqualTo(created.getId());
         assertThat(fetchedFirst.getSku()).isEqualTo("PROD-KEY-01");
+
+        // Verify outbox event was created atomically alongside the product
+        List<OutboxEvent> outboxEvents = outboxRepository.findAll();
+        assertThat(outboxEvents).hasSize(1);
+        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("CREATED");
 
         // Inspect Redis cache instance directly to verify caching mechanism
         Cache productCache = cacheManager.getCache("productsById");

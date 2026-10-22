@@ -33,9 +33,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     runtimeOnly("org.postgresql:postgresql")
 
-    // Messaging & Streaming
-    implementation("org.springframework.kafka:spring-kafka")
-
     // Database Migrations
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
@@ -70,13 +67,11 @@ dependencies {
     // Testing Core
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("com.h2database:h2")
 
     // Integration Testing & Testcontainers
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
-    testImplementation("org.testcontainers:kafka")
     testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
 }
 

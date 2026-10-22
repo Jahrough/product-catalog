@@ -3,15 +3,19 @@ package dev.jahlopez.productcatalog.event;
 import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Immutable data record representing a product lifecycle event (e.g., created, updated, deleted)
- * that gets published to the Kafka event stream.
+ * that is transactionally logged to the outbox table for reliable downstream event streaming,
+ * complete with idempotency and versioning metadata.
  *
  * Uses Lombok's @Builder annotation to allow convenient and readable object creation.
  */
 @Builder
 public record ProductEvent(
+        UUID eventId,
+        Long version,
         Long productId,
         String sku,
         String name,
