@@ -2,15 +2,18 @@
 FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /app
 
-# Copy Gradle wrapper and build configuration files
+# Copy Gradle wrapper and build configuration files first
 COPY gradlew build.gradle.kts settings.gradle.kts ./
 COPY gradle gradle
 
-# Copy source code
+# Download and cache dependencies offline to leverage Docker layer caching
+RUN ./gradlew dependencies --no-daemon
+
+# Copy source code after dependencies are cached
 COPY src src
 
 # Build the executable fat JAR (skipping tests to speed up container build times)
-RUN ./gradlew bootJar -x test
+RUN ./gradlew bootJar -x test --no-daemon
 
 # Stage 2: Run the application using lightweight Temurin JRE (Alpine base)
 FROM eclipse-temurin:21-jre-alpine
