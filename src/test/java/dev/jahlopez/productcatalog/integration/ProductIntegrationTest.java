@@ -15,7 +15,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -30,10 +29,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Integration test suite for the product catalog microservice.
  *
- * Uses Testcontainers to provision isolated PostgreSQL, Redis, Kafka,
- * and Elasticsearch instances, enabling integration tests against real
- * infrastructure dependencies. Verifies database persistence, Flyway
- * migrations, Redis caching, and Kafka event publishing behavior.
+ * Uses Testcontainers to provision isolated PostgreSQL, Redis, and Kafka
+ * instances, enabling integration tests against real infrastructure dependencies.
+ * Verifies database persistence, Flyway migrations, Redis caching, and Kafka
+ * event publishing behavior.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -71,13 +70,6 @@ class ProductIntegrationTest {
     @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
-    /** Isolated Elasticsearch container for event publishing integration testing. */
-    @Container
-    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:8.15.0")
-            .withEnv("xpack.security.enabled", "false")
-            .withEnv("xpack.security.transport.ssl.enabled", "false")
-            .withEnv("xpack.security.http.ssl.enabled", "false");
-
     /**
      * Dynamically registers Spring Boot datasource, Redis, and Kafka properties
      * from the active Testcontainers instances.
@@ -95,9 +87,6 @@ class ProductIntegrationTest {
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
 
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-
-        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
-        registry.add("spring.elasticsearch.uris", () -> "http://" + elasticsearch.getHttpHostAddress());
     }
 
     @Autowired

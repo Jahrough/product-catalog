@@ -18,7 +18,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
@@ -53,11 +52,6 @@ class KafkaEventIntegrationTest {
     @Container
     static final ConfluentKafkaContainer kafka = new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
-    @Container
-    static final ElasticsearchContainer elasticsearch = new ElasticsearchContainer(DockerImageName.parse("docker.elastic.co/elasticsearch/elasticsearch:8.15.0"))
-            .withEnv("discovery.type", "single-node")
-            .withEnv("xpack.security.enabled", "false");
-
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
@@ -70,8 +64,6 @@ class KafkaEventIntegrationTest {
 
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
-
-        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
     }
 
     @Autowired

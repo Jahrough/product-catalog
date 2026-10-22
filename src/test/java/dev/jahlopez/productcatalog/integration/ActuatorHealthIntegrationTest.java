@@ -11,7 +11,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
@@ -62,20 +61,6 @@ class ActuatorHealthIntegrationTest {
     static final ConfluentKafkaContainer kafka =
             new ConfluentKafkaContainer("confluentinc/cp-kafka:7.5.0");
 
-    /*
-     * Elasticsearch supports search-related beans and its Actuator
-     * health indicator. Security is disabled for this isolated test
-     * environment so the application can connect over HTTP without
-     * authentication or TLS configuration.
-     */
-    @Container
-    static final ElasticsearchContainer elasticsearch =
-            new ElasticsearchContainer(
-                    DockerImageName.parse(
-                            "docker.elastic.co/elasticsearch/elasticsearch:8.15.0"))
-                    .withEnv("discovery.type", "single-node")
-                    .withEnv("xpack.security.enabled", "false");
-
     /**
      * Overrides application connection settings with endpoints provided
      * by the running containers. Container ports may be dynamically mapped,
@@ -94,9 +79,8 @@ class ActuatorHealthIntegrationTest {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
 
-        // Kafka broker and Elasticsearch endpoint.
+        // Kafka broker.
         registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-        registry.add("spring.elasticsearch.uris", elasticsearch::getHttpHostAddress);
     }
 
     @Autowired
@@ -109,8 +93,7 @@ class ActuatorHealthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.components.db.status").value("UP"))
-                .andExpect(jsonPath("$.components.redis.status").value("UP"))
-                .andExpect(jsonPath("$.components.elasticsearch.status").value("UP"));
+                .andExpect(jsonPath("$.components.redis.status").value("UP"));
     }
 
     @Test

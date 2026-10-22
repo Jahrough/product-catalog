@@ -1,6 +1,5 @@
 package dev.jahlopez.productcatalog.controller;
 
-import dev.jahlopez.productcatalog.config.swagger.ApiReadResponses;
 import dev.jahlopez.productcatalog.config.swagger.ApiWriteResponses;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
@@ -74,7 +73,6 @@ public class ProductController {
             description = "Product successfully retrieved",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProductResponseDto.class))
     )
-    @ApiReadResponses
     @GetMapping("/{id}")
     public ResponseEntity<ProductResponseDto> getProductById(@PathVariable Long id) {
         return ResponseEntity.ok(productService.getProductById(id));
@@ -95,7 +93,6 @@ public class ProductController {
             description = "Product successfully retrieved",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProductResponseDto.class))
     )
-    @ApiReadResponses
     @GetMapping("/sku/{sku}")
     public ResponseEntity<ProductResponseDto> getProductBySku(@PathVariable String sku) {
         return ResponseEntity.ok(productService.getProductBySku(sku));
@@ -135,7 +132,6 @@ public class ProductController {
             description = "Product deleted successfully (No Content)",
             content = @Content
     )
-    @ApiReadResponses
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);
