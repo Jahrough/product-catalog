@@ -13,74 +13,71 @@ java {
     }
 }
 
-// Override Testcontainers version managed by Spring Boot.
+// Override Testcontainers version managed by Spring Boot
 extra["testcontainers.version"] = "1.21.4"
 
 val mapstructVersion = "1.5.5.Final"
 val flywayVersion = "10.17.0"
+val springdocVersion = "2.6.0"
+val logstashEncoderVersion = "7.4"
+val testcontainersRedisVersion = "2.2.4"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    // Spring Boot Core: Web, Data JPA, Validation
+    // Spring Boot Core
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     runtimeOnly("org.postgresql:postgresql")
 
-    // Event Streaming: Apache Kafka
+    // Messaging & Streaming
     implementation("org.springframework.kafka:spring-kafka")
 
-    // Database Migrations: Flyway
+    // Database Migrations
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
-    // Search Engine: Elasticsearch Integration
-    implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
+    // API Documentation
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
 
-    // API Documentation: OpenAPI / Swagger UI
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-
-    // Caching: Redis
+    // Caching
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // Enterprise Observability: Actuator, Metrics, Tracing, Logging
+    // Observability & Metrics
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-zipkin")
-    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+    implementation("net.logstash.logback:logstash-logback-encoder:$logstashEncoderVersion")
 
-    // Object Mapping: MapStruct
+    // Object Mapping
     implementation("org.mapstruct:mapstruct:$mapstructVersion")
 
-    // Boilerplate Reduction: Lombok & MapStruct Binding
+    // Annotation Processors & Boilerplate Reduction
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.mapstruct:mapstruct-processor:$mapstructVersion")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
-    // Test Scope Lombok Support
+    // Test Annotation Support
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")
 
-    // Testing: JUnit 5, Spring Boot, and Embedded Kafka
+    // Testing Core
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
-
-    // Testing: In-Memory Database
     testImplementation("com.h2database:h2")
 
-    // Integration Testing: Testcontainers
+    // Integration Testing & Testcontainers
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:kafka")
-    testImplementation("com.redis:testcontainers-redis:2.2.4")
-    testImplementation("org.testcontainers:elasticsearch")
+    testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
 }
 
 // Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings
