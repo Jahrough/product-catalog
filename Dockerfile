@@ -1,4 +1,4 @@
-# Stage 1: Build the application using Gradle
+# Stage 1: Build the application using Gradle & Temurin JDK (Debian/Ubuntu base)
 FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /app
 
@@ -12,8 +12,8 @@ COPY src src
 # Build the executable fat JAR (skipping tests to speed up container build times)
 RUN ./gradlew bootJar -x test
 
-# Stage 2: Run the application using Amazon Corretto 21 lightweight runtime
-FROM amazoncorretto:21-alpine
+# Stage 2: Run the application using lightweight Temurin JRE (Alpine base)
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Create a non-root system user for security compliance in Kubernetes / AWS EKS
