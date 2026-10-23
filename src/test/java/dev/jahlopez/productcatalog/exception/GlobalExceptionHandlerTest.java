@@ -63,7 +63,7 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/test/products/{id}", missingId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Product not found with id: " + missingId));
     }
 
@@ -80,7 +80,7 @@ class GlobalExceptionHandlerTest {
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.error").value("Bad Request"));
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"));
     }
 
     @Test
@@ -92,7 +92,7 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/test/products/1"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500))
-                .andExpect(jsonPath("$.error").value("Internal Server Error"));
+                .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"));
     }
 
     @RestController

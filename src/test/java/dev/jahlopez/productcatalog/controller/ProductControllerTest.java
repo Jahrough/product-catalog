@@ -3,8 +3,8 @@ package dev.jahlopez.productcatalog.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
+import dev.jahlopez.productcatalog.exception.ProductNotFoundException;
 import dev.jahlopez.productcatalog.service.ProductService;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -72,13 +72,13 @@ class ProductControllerTest {
     @Test
     void getProductById_whenMissing_shouldReturnNotFound() throws Exception {
         when(productService.getProductById(MISSING_PRODUCT_ID))
-                .thenThrow(new EntityNotFoundException(
+                .thenThrow(new ProductNotFoundException(
                         "Product not found with id: " + MISSING_PRODUCT_ID));
 
         mockMvc.perform(get(PRODUCTS_URL + "/{id}", MISSING_PRODUCT_ID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.error").value("Not Found"));
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -121,7 +121,7 @@ class ProductControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.error").value("Bad Request"));
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"));
 
         verifyNoInteractions(productService);
     }
@@ -136,7 +136,7 @@ class ProductControllerTest {
 
     @Test
     void deleteProduct_whenMissing_shouldReturnNotFound() throws Exception {
-        doThrow(new EntityNotFoundException(
+        doThrow(new ProductNotFoundException(
                 "Product not found with id: " + MISSING_PRODUCT_ID))
                 .when(productService)
                 .deleteProduct(MISSING_PRODUCT_ID);
@@ -145,7 +145,7 @@ class ProductControllerTest {
                         PRODUCTS_URL + "/{id}", MISSING_PRODUCT_ID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.error").value("Not Found"));
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 
     private static ProductResponseDto productResponse() {

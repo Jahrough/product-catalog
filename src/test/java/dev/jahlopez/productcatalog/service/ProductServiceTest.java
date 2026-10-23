@@ -3,12 +3,12 @@ package dev.jahlopez.productcatalog.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
+import dev.jahlopez.productcatalog.exception.ProductNotFoundException;
 import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.Product;
 import dev.jahlopez.productcatalog.model.OutboxEvent;
 import dev.jahlopez.productcatalog.repository.OutboxRepository;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -64,6 +64,7 @@ class ProductServiceTest {
                 .description("Multiport adapter")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
+                .version(0L)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -104,6 +105,7 @@ class ProductServiceTest {
                 .name("USB-C Hub")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
+                .version(0L)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -131,15 +133,15 @@ class ProductServiceTest {
     }
 
     /**
-     * Verifies that attempting to retrieve a non-existent product by ID throws an {@link EntityNotFoundException}.
+     * Verifies that attempting to retrieve a non-existent product by ID throws a {@link ProductNotFoundException}.
      */
     @Test
     void getProductById_WhenProductNotFound_ShouldThrowException() {
         // Arrange: Stub repository to return empty Optional for an unknown ID
         when(productRepository.findById(99L)).thenReturn(Optional.empty());
 
-        // Act & Assert: Verify that calling the method throws EntityNotFoundException
-        assertThrows(EntityNotFoundException.class, () -> {
+        // Act & Assert: Verify that calling the method throws ProductNotFoundException
+        assertThrows(ProductNotFoundException.class, () -> {
             productService.getProductById(99L);
         });
 
@@ -177,6 +179,7 @@ class ProductServiceTest {
                 .description(requestDto.getDescription())
                 .price(requestDto.getPrice())
                 .stockQuantity(requestDto.getStockQuantity())
+                .version(0L)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -225,6 +228,7 @@ class ProductServiceTest {
                 .name("USB-C Hub")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
+                .version(0L)
                 .build();
 
         // Stub repository, object mapper, and outbox repository behaviors

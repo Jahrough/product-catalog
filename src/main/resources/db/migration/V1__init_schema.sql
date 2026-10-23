@@ -1,4 +1,4 @@
--- Create products table with optimized column constraints and data types
+-- Create products table with optimized column constraints, data types, and optimistic locking version
 CREATE TABLE products (
     id BIGSERIAL PRIMARY KEY,
     sku VARCHAR(64) NOT NULL UNIQUE,
@@ -6,6 +6,7 @@ CREATE TABLE products (
     description TEXT,
     price NUMERIC(10, 2) NOT NULL,
     stock_quantity INTEGER NOT NULL CHECK (stock_quantity >= 0),
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

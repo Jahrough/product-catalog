@@ -1,6 +1,6 @@
 package dev.jahlopez.productcatalog.exception;
 
-import jakarta.persistence.EntityNotFoundException;
+import dev.jahlopez.productcatalog.dto.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -9,26 +9,26 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
-import java.util.stream.Collectors;
+import java.time.Instant;
+import java.util.List;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     /**
-     * Handles resource not found exceptions (404 Not Found).
+     * Handles product not found and general resource not found exceptions (404 Not Found).
      */
-    @ExceptionHandler({ResourceNotFoundException.class, EntityNotFoundException.class})
-    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(
+    @ExceptionHandler({ProductNotFoundException.class, ResourceNotFoundException.class, jakarta.persistence.EntityNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFoundException(
             RuntimeException ex, HttpServletRequest request) {
 
         log.warn("Resource not found exception occurred: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+        ApiErrorResponse errorResponse = ApiErrorResponse.builder()
+                .timestamp(Instant.now())
                 .status(HttpStatus.NOT_FOUND.value())
-                .error(HttpStatus.NOT_FOUND.getReasonPhrase())
+                .errorCode("RESOURCE_NOT_FOUND")
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
@@ -37,24 +37,28 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Handles bean validation constraint violations (400 Bad Request).
+     * Handles bean validation constraint violations (400 Bad Request) with structured validation errors.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationExceptions(
+    public ResponseEntity<ApiErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
 
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
-                .collect(Collectors.joining(", "));
+        List<ApiErrorResponse.ValidationError> validationErrors = ex.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> ApiErrorResponse.ValidationError.builder()
+                        .field(fieldError.getField())
+                        .rejectedMessage(fieldError.getDefaultMessage())
+                        .build())
+                .toList();
 
-        log.warn("Validation failed for request path [{}]: {}", request.getRequestURI(), message);
+        log.warn("Validation failed for request path [{}]: {} field errors detected", request.getRequestURI(), validationErrors.size());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+        ApiErrorResponse errorResponse = ApiErrorResponse.builder()
+                .timestamp(Instant.now())
                 .status(HttpStatus.BAD_REQUEST.value())
-                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                .message(message)
+                .errorCode("INVALID_REQUEST_PAYLOAD")
+                .message("Validation failed for one or more fields.")
                 .path(request.getRequestURI())
+                .validationErrors(validationErrors)
                 .build();
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
@@ -64,15 +68,15 @@ public class GlobalExceptionHandler {
      * Catches all unhandled system exceptions (500 Internal Server Error).
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGlobalException(
+    public ResponseEntity<ApiErrorResponse> handleGlobalException(
             Exception ex, HttpServletRequest request) {
 
         log.error("Unexpected internal server error occurred at path [{}]: ", request.getRequestURI(), ex);
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .timestamp(LocalDateTime.now())
+        ApiErrorResponse errorResponse = ApiErrorResponse.builder()
+                .timestamp(Instant.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
+                .errorCode("INTERNAL_SERVER_ERROR")
                 .message("An unexpected error occurred: " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();

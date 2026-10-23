@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 /**
  * Represents the persistent Product domain entity mapped to the {@code products} table
  * in the relational database. Utilizes JPA annotations for ORM mapping, auditing listeners,
- * and explicit equals/hashCode boundaries for high-performance entity management.
+ * optimistic locking versioning, and explicit equals/hashCode boundaries for high-performance entity management.
  */
 @Entity
 @Table(
@@ -72,6 +72,14 @@ public class Product {
      */
     @Column(nullable = false)
     private Integer stockQuantity;
+
+    /**
+     * Optimistic locking version field to prevent concurrent modification anomalies
+     * and provide version metadata for downstream anti-stale event guards.
+     */
+    @Version
+    @Column(nullable = false)
+    private Long version;
 
     /**
      * Timestamp indicating when the product entity was initially created.

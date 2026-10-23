@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.event.ProductEvent;
+import dev.jahlopez.productcatalog.exception.ProductNotFoundException;
 import dev.jahlopez.productcatalog.mapper.ProductMapper;
 import dev.jahlopez.productcatalog.model.OutboxEvent;
 import dev.jahlopez.productcatalog.model.Product;
 import dev.jahlopez.productcatalog.repository.OutboxRepository;
 import dev.jahlopez.productcatalog.repository.ProductRepository;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -48,9 +48,10 @@ public class ProductService {
         Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
 
-        // Construct the domain event with metadata
+        // Construct the domain event with version and metadata
         ProductEvent event = ProductEvent.builder()
                 .eventId(UUID.randomUUID())
+                .version(savedProduct.getVersion())
                 .productId(savedProduct.getId())
                 .sku(savedProduct.getSku())
                 .name(savedProduct.getName())
@@ -72,13 +73,13 @@ public class ProductService {
      *
      * @param id the database primary key identifier
      * @return the product response DTO
-     * @throws EntityNotFoundException if no product exists with the given ID
+     * @throws ProductNotFoundException if no product exists with the given ID
      */
     @Transactional(readOnly = true)
     @Cacheable(value = "productsById", key = "#id")
     public ProductResponseDto getProductById(Long id) {
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
         return productMapper.toResponseDto(product);
     }
 
@@ -88,13 +89,13 @@ public class ProductService {
      *
      * @param sku the unique product SKU identifier
      * @return the product response DTO
-     * @throws EntityNotFoundException if no product exists with the given SKU
+     * @throws ProductNotFoundException if no product exists with the given SKU
      */
     @Transactional(readOnly = true)
     @Cacheable(value = "productsBySku", key = "#sku")
     public ProductResponseDto getProductBySku(String sku) {
         Product product = productRepository.findBySku(sku)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with SKU: " + sku));
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with SKU: " + sku));
         return productMapper.toResponseDto(product);
     }
 
@@ -117,19 +118,18 @@ public class ProductService {
      * Transactionally logs a DELETED event intent to the outbox table and evicts all cache tiers to ensure cache consistency.
      *
      * @param id the database primary key identifier of the product to delete
-     * @throws EntityNotFoundException if no product exists with the given ID
+     * @throws ProductNotFoundException if no product exists with the given ID
      */
     @Transactional
     @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
     public void deleteProduct(Long id) {
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Product not found with id: " + id));
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
 
-        productRepository.delete(product);
-
-        // Construct the domain event with metadata
+        // Construct the domain event with version metadata before deletion
         ProductEvent event = ProductEvent.builder()
                 .eventId(UUID.randomUUID())
+                .version(product.getVersion())
                 .productId(product.getId())
                 .sku(product.getSku())
                 .name(product.getName())
@@ -141,6 +141,8 @@ public class ProductService {
 
         // Transactionally save event intent to the outbox table
         saveOutboxEvent(product.getId().toString(), "DELETED", event);
+
+        productRepository.delete(product);
     }
 
     /**
