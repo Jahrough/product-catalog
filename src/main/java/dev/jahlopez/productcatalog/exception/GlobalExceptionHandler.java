@@ -17,13 +17,13 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     /**
-     * Handles product not found and general resource not found exceptions (404 Not Found).
+     * Handles product not found and JPA entity not found exceptions (404 Not Found).
      */
-    @ExceptionHandler({ProductNotFoundException.class, ResourceNotFoundException.class, jakarta.persistence.EntityNotFoundException.class})
-    public ResponseEntity<ApiErrorResponse> handleResourceNotFoundException(
+    @ExceptionHandler({ProductNotFoundException.class, jakarta.persistence.EntityNotFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleProductNotFoundException(
             RuntimeException ex, HttpServletRequest request) {
 
-        log.warn("Resource not found exception occurred: {}", ex.getMessage());
+        log.warn("Product not found exception occurred: {}", ex.getMessage());
 
         ApiErrorResponse errorResponse = ApiErrorResponse.builder()
                 .timestamp(Instant.now())

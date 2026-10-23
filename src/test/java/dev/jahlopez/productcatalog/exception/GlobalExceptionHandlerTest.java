@@ -54,11 +54,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("Should return 404 Not Found when ResourceNotFoundException is thrown")
-    void shouldHandleResourceNotFoundException() throws Exception {
+    @DisplayName("Should return 404 Not Found when ProductNotFoundException is thrown")
+    void shouldHandleProductNotFoundException() throws Exception {
         Long missingId = 99L;
         when(productService.getProductById(missingId))
-                .thenThrow(new ResourceNotFoundException("Product not found with id: " + missingId));
+                .thenThrow(new ProductNotFoundException("Product not found with id: " + missingId));
 
         mockMvc.perform(get("/test/products/{id}", missingId))
                 .andExpect(status().isNotFound())
