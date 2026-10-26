@@ -17,6 +17,7 @@ java {
 val mapstructVersion = "1.5.5.Final"
 val springdocVersion = "3.2.0"
 val logstashEncoderVersion = "9.0"
+val testcontainersVersion = "2.0.5"
 val testcontainersRedisVersion = "2.2.4"
 
 repositories {
@@ -28,6 +29,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-jackson2")
     runtimeOnly("org.postgresql:postgresql")
 
     // Database Migrations
@@ -64,11 +67,13 @@ dependencies {
     // Testing Core
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("com.h2database:h2")
 
     // Integration Testing & Testcontainers
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:$testcontainersVersion")
+    testImplementation("org.testcontainers:testcontainers-postgresql:$testcontainersVersion")
     testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
 }
 

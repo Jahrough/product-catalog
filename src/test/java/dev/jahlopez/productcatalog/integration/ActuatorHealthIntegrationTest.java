@@ -1,34 +1,36 @@
+
 package dev.jahlopez.productcatalog.integration;
 
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests for Spring Boot Actuator health checks, Kubernetes
- * health probes, and Micrometer Prometheus metrics.
- *
- * Testcontainers provides isolated instances of the external services so
- * the tests can verify health indicators against real infrastructure.
+ * Integration tests for Actuator health checks, Kubernetes health probes,
+ * and Prometheus metrics using PostgreSQL and Redis Testcontainers.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "management.endpoint.health.show-components=always",
+        "management.endpoint.health.show-details=always"
+})
 @AutoConfigureMockMvc
 @Testcontainers
 class ActuatorHealthIntegrationTest {
@@ -38,8 +40,8 @@ class ActuatorHealthIntegrationTest {
      * Testcontainers assigns a host port and creates the test database.
      */
     @Container
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:15-alpine")
+    static final PostgreSQLContainer postgres =
+            new PostgreSQLContainer("postgres:15-alpine")
                     .withDatabaseName("testdb")
                     .withUsername("test")
                     .withPassword("test");
@@ -59,7 +61,7 @@ class ActuatorHealthIntegrationTest {
      */
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL connection and schema migration.
+        // PostgreSQL connection and migrations.
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
@@ -77,19 +79,20 @@ class ActuatorHealthIntegrationTest {
     @DisplayName("Should report UP when application health indicators are healthy")
     void shouldReturnHealthStatusUp() throws Exception {
         mockMvc.perform(get("/actuator/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.components.db.status").value("UP"))
-                .andExpect(jsonPath("$.components.redis.status").value("UP"));
+               .andDo(print())
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value("UP"))
+               .andExpect(jsonPath("$.components.db.status").value("UP"))
+               .andExpect(jsonPath("$.components.redis.status").value("UP"));
     }
 
     @Test
     @DisplayName("Should expose Prometheus metrics in the expected text format")
     void shouldExposePrometheusMetricsEndpoint() throws Exception {
         mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
-                .andExpect(content().string(containsString("jvm_memory_used_bytes")));
+               .andExpect(status().isOk())
+               .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+               .andExpect(content().string(containsString("jvm_memory_used_bytes")));
     }
 
     @Test
@@ -97,12 +100,12 @@ class ActuatorHealthIntegrationTest {
     void shouldExposeKubernetesProbes() throws Exception {
         // Liveness indicates whether the application process is functioning.
         mockMvc.perform(get("/actuator/health/liveness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value("UP"));
 
         // Readiness indicates whether the application is ready to receive traffic.
         mockMvc.perform(get("/actuator/health/readiness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value("UP"));
     }
 }
