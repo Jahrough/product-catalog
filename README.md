@@ -1,6 +1,6 @@
 # Product Catalog Service
 
-A Java 21 / Spring Boot REST service for managing product catalog data. The project focuses on a maintainable API, PostgreSQL persistence and migrations, request validation, caching configuration, automated tests, containerization, and a CI workflow.
+A Java 25 / Spring Boot REST service for managing product catalog data. The project focuses on a maintainable API, PostgreSQL persistence and migrations, request validation, caching configuration, automated tests, containerization, and a CI workflow.
 
 > **Implementation status:** The repository includes a PostgreSQL-backed transactional outbox model and tests for persisting product lifecycle events. Outbox-to-Kafka publishing or Debezium CDC delivery should not be considered implemented until the publisher/connector and end-to-end delivery have been configured and verified.
 
@@ -47,8 +47,8 @@ The outbox provides a place to persist product events in PostgreSQL. A separate 
 
 ## Technology stack
 
-- **Language/runtime:** Java 21
-- **Application framework:** Spring Boot 3.2.4, Spring MVC
+- **Language/runtime:** Java 25 (LTS)
+- **Application framework:** Spring Boot 4.1.2, Spring MVC
 - **Persistence:** Spring Data JPA, PostgreSQL
 - **Schema migrations:** Flyway
 - **Caching integration:** Spring Cache and Spring Data Redis
@@ -95,7 +95,7 @@ This is a representative layout; the exact package contents may evolve as the pr
 
 ## Prerequisites
 
-- JDK 21
+- JDK 25
 - Docker Desktop or another working Docker Engine for Testcontainers and container builds
 - PostgreSQL for local application runs
 - Redis if the configured cache integration is required by the active application configuration
@@ -148,7 +148,7 @@ The HTML report is generated under `build/reports/jacoco/test/html/`; the XML re
 
 ## Docker
 
-The Dockerfile uses a multi-stage build with a Java 21 JDK build stage and a Java 21 JRE runtime stage. The runtime image runs the application as a non-root user and exposes port `8080`. The image build skips tests (`bootJar -x test`), so tests should run in CI before the image is published.
+The Dockerfile uses a multi-stage build with a Java 25 JDK build stage and a Java 25 JRE runtime stage. The runtime image runs the application as a non-root user and exposes port `8080`. The image build skips tests (`bootJar -x test`), so tests should run in CI before the image is published.
 
 Build the image from the repository root:
 
@@ -248,7 +248,7 @@ For non-local environments, avoid exposing detailed health information to unauth
 
 The supplied GitHub Actions workflow is configured to:
 
-1. Run `./gradlew test` using Temurin Java 21.
+1. Run `./gradlew test` using Temurin Java 25.
 2. Build a Docker image and scan it with Trivy for `HIGH` and `CRITICAL` findings, uploading SARIF results to GitHub Code Scanning.
 3. On a push to `main`, publish the image to GitHub Container Registry (GHCR) after the required preceding jobs succeed.
 4. Tag the image with the commit SHA and `latest`.

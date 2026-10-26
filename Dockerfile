@@ -1,5 +1,5 @@
 # Stage 1: Build the application using Gradle & Temurin JDK (Debian/Ubuntu base)
-FROM eclipse-temurin:21-jdk-jammy AS build
+FROM eclipse-temurin:25-jdk-jammy AS build
 WORKDIR /app
 
 # Copy Gradle wrapper and build configuration files first
@@ -16,7 +16,7 @@ COPY src src
 RUN ./gradlew bootJar -x test --no-daemon
 
 # Stage 2: Run the application using lightweight Temurin JRE (Alpine base)
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 # Create a non-root system user for security compliance in Kubernetes / AWS EKS

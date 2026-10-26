@@ -1,7 +1,7 @@
 plugins {
     id("java")
     id("jacoco")
-    id("org.springframework.boot") version "3.2.4"
+    id("org.springframework.boot") version "4.1.2"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -10,17 +10,13 @@ version = "1.0-SNAPSHOT"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
-// Override Testcontainers version managed by Spring Boot
-extra["testcontainers.version"] = "1.21.4"
-
 val mapstructVersion = "1.5.5.Final"
-val flywayVersion = "10.17.0"
-val springdocVersion = "2.6.0"
-val logstashEncoderVersion = "7.4"
+val springdocVersion = "3.2.0"
+val logstashEncoderVersion = "9.0"
 val testcontainersRedisVersion = "2.2.4"
 
 repositories {
@@ -35,8 +31,8 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     // Database Migrations
-    implementation("org.flywaydb:flyway-core:$flywayVersion")
-    implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
 
     // API Documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
@@ -77,7 +73,7 @@ dependencies {
 }
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = "0.8.16"
 }
 
 // Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings
