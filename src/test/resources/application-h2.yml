@@ -1,0 +1,66 @@
+# application-h2.yml
+#
+# H2 test profile for fast, isolated tests that do not require PostgreSQL.
+# PostgreSQL compatibility mode supports some PostgreSQL-like SQL syntax,
+# but does not guarantee equivalent behavior for database-specific features.
+#
+# Activate with: spring.profiles.active=h2
+# Use the postgres-test profile for integration tests that verify Flyway
+# migrations, PostgreSQL-specific behavior, and schema compatibility.
+
+spring:
+  datasource:
+    # Use an in-memory database to keep tests isolated from persistent data.
+    # DB_CLOSE_DELAY=-1 keeps the database alive until the JVM exits,
+    # which can be useful when connections are opened and closed between tests.
+    # MODE=PostgreSQL enables selected PostgreSQL compatibility behaviors.
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    # Explicitly select the H2 dialect for this test database.
+    database-platform: org.hibernate.dialect.H2Dialect
+
+    hibernate:
+      # Create the schema when the Hibernate session factory starts and
+      # drop it when it closes. Appropriate for disposable H2 test databases.
+      # Do not use this strategy for production or migration-validation tests.
+      ddl-auto: create-drop
+
+    # Print generated SQL during tests to simplify troubleshooting.
+    # Prefer logger-based SQL output if you need more control over formatting.
+    show-sql: true
+
+    properties:
+      hibernate:
+        # Format generated SQL for readability in test output.
+        format_sql: true
+
+  flyway:
+    # Hibernate manages the disposable H2 schema in this profile.
+    # Flyway migrations are tested separately using the PostgreSQL profile.
+    enabled: false
+
+  data:
+    redis:
+      # Allow local Redis or Testcontainers connection details to be supplied
+      # through environment variables. Integration tests can override these
+      # properties using @DynamicPropertySource.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+      # Set a finite timeout to avoid waiting indefinitely on Redis operations.
+      timeout: 2s
+
+logging:
+  level:
+    # Enable application debug logs while diagnosing test failures.
+    dev.jahlopez.productcatalog: DEBUG
+
+    # Keep Spring's test framework output concise.
+    org.springframework.test: INFO
+
+    # Log Hibernate-generated SQL statements for database troubleshooting.
+    org.hibernate.SQL: DEBUG
