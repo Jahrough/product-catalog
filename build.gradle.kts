@@ -1,7 +1,7 @@
 plugins {
     id("java")
     id("jacoco")
-    id("org.springframework.boot") version "3.2.4"
+    id("org.springframework.boot") version "4.1.2"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -10,17 +10,14 @@ version = "1.0-SNAPSHOT"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
-// Override Testcontainers version managed by Spring Boot
-extra["testcontainers.version"] = "1.21.4"
-
 val mapstructVersion = "1.5.5.Final"
-val flywayVersion = "10.17.0"
-val springdocVersion = "2.6.0"
-val logstashEncoderVersion = "7.4"
+val springdocVersion = "3.2.0"
+val logstashEncoderVersion = "9.0"
+val testcontainersVersion = "2.0.5"
 val testcontainersRedisVersion = "2.2.4"
 
 repositories {
@@ -32,11 +29,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-jackson2")
     runtimeOnly("org.postgresql:postgresql")
 
     // Database Migrations
-    implementation("org.flywaydb:flyway-core:$flywayVersion")
-    implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
 
     // API Documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
@@ -68,16 +67,18 @@ dependencies {
     // Testing Core
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("com.h2database:h2")
 
     // Integration Testing & Testcontainers
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:$testcontainersVersion")
+    testImplementation("org.testcontainers:testcontainers-postgresql:$testcontainersVersion")
     testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
 }
 
 jacoco {
-    toolVersion = "0.8.11"
+    toolVersion = "0.8.16"
 }
 
 // Scope MapStruct flags strictly to main compilation task to prevent unused-option test warnings

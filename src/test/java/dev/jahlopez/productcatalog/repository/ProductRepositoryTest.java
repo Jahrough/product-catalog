@@ -2,16 +2,16 @@ package dev.jahlopez.productcatalog.repository;
 
 import dev.jahlopez.productcatalog.config.JpaAuditingConfig;
 import dev.jahlopez.productcatalog.model.Product;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -50,8 +50,7 @@ class ProductRepositoryTest {
      * from any PostgreSQL instance running directly on the developer's machine.</p>
      */
     @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:15-alpine")
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:15-alpine")
                     .withDatabaseName("product_catalog_test")
                     .withUsername("test")
                     .withPassword("test");
@@ -80,7 +79,7 @@ class ProductRepositoryTest {
 
     /** JPA test utility for persisting entities and flushing changes. */
     @Autowired
-    private TestEntityManager entityManager;
+    private EntityManager entityManager;
 
     /** Repository being tested. */
     @Autowired
@@ -101,7 +100,8 @@ class ProductRepositoryTest {
                 .stockQuantity(15)
                 .build();
 
-        entityManager.persistAndFlush(product);
+        entityManager.persist(product);
+        entityManager.flush();
         entityManager.clear();
 
         // Act

@@ -1,18 +1,21 @@
+
 package dev.jahlopez.productcatalog.integration;
 
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.hamcrest.Matchers.containsString;
@@ -22,87 +25,98 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests for Spring Boot Actuator health checks, Kubernetes
- * health probes, and Micrometer Prometheus metrics.
+ * Integration tests for Spring Boot Actuator health endpoints,
+ * Kubernetes health probes, and Prometheus metrics.
  *
- * Testcontainers provides isolated instances of the external services so
- * the tests can verify health indicators against real infrastructure.
+ * <p>Tests use real PostgreSQL and Redis instances managed by Testcontainers.
+ * The postgres-test profile enables database integration and schema validation.</p>
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "management.endpoint.health.show-components=always",
+        "management.endpoint.health.show-details=always"
+})
 @AutoConfigureMockMvc
+@ActiveProfiles("postgres-test")
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ActuatorHealthIntegrationTest {
 
-    /*
-     * PostgreSQL backs the application's relational persistence layer.
-     * Testcontainers assigns a host port and creates the test database.
+    private static final String HEALTH_ENDPOINT = "/actuator/health";
+    private static final String LIVENESS_ENDPOINT = "/actuator/health/liveness";
+    private static final String READINESS_ENDPOINT = "/actuator/health/readiness";
+    private static final String PROMETHEUS_ENDPOINT = "/actuator/prometheus";
+
+    private static final String EXPECTED_HEALTH_STATUS = "UP";
+
+    /**
+     * PostgreSQL instance used for database connectivity and schema
+     * initialization tests.
      */
     @Container
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:15-alpine")
+    static final PostgreSQLContainer postgres =
+            new PostgreSQLContainer("postgres:15-alpine")
                     .withDatabaseName("testdb")
                     .withUsername("test")
                     .withPassword("test");
 
-    /*
-     * Redis supports the application's cache and its Actuator health check.
+    /**
+     * Redis instance used to verify the application's Redis health indicator.
      */
     @Container
     static final RedisContainer redis =
             new RedisContainer(DockerImageName.parse("redis:7-alpine"));
 
+    @Autowired
+    private MockMvc mockMvc;
+
     /**
-     * Overrides application connection settings with endpoints provided
-     * by the running containers. Container ports may be dynamically mapped,
-     * so tests should use the connection details exposed by Testcontainers
-     * rather than hard-coded localhost ports.
+     * Supplies connection properties from the running Testcontainers
+     * instances before the Spring application context is initialized.
      */
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL connection and schema migration.
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.flyway.enabled", () -> true);
 
-        // Redis connection.
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
 
-    @Autowired
-    private MockMvc mockMvc;
-
     @Test
-    @DisplayName("Should report UP when application health indicators are healthy")
+    @DisplayName("Reports UP when PostgreSQL and Redis are healthy")
     void shouldReturnHealthStatusUp() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.components.db.status").value("UP"))
-                .andExpect(jsonPath("$.components.redis.status").value("UP"));
+        mockMvc.perform(get(HEALTH_ENDPOINT))
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value(EXPECTED_HEALTH_STATUS))
+               .andExpect(jsonPath("$.components.db.status").value(EXPECTED_HEALTH_STATUS))
+               .andExpect(jsonPath("$.components.redis.status").value(EXPECTED_HEALTH_STATUS));
     }
 
     @Test
-    @DisplayName("Should expose Prometheus metrics in the expected text format")
+    @DisplayName("Exposes JVM memory metrics through Prometheus")
     void shouldExposePrometheusMetricsEndpoint() throws Exception {
-        mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
-                .andExpect(content().string(containsString("jvm_memory_used_bytes")));
+        mockMvc.perform(get(PROMETHEUS_ENDPOINT))
+               .andExpect(status().isOk())
+               .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
+               .andExpect(content().string(
+                       containsString("jvm_memory_used_bytes")
+               ));
     }
 
     @Test
-    @DisplayName("Should report UP for Kubernetes liveness and readiness probes")
+    @DisplayName("Reports UP for Kubernetes liveness and readiness probes")
     void shouldExposeKubernetesProbes() throws Exception {
-        // Liveness indicates whether the application process is functioning.
-        mockMvc.perform(get("/actuator/health/liveness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+        assertHealthEndpointUp(LIVENESS_ENDPOINT);
+        assertHealthEndpointUp(READINESS_ENDPOINT);
+    }
 
-        // Readiness indicates whether the application is ready to receive traffic.
-        mockMvc.perform(get("/actuator/health/readiness"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
+    /**
+     * Asserts that an Actuator health endpoint returns HTTP 200 and UP.
+     */
+    private void assertHealthEndpointUp(String endpoint) throws Exception {
+        mockMvc.perform(get(endpoint))
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value(EXPECTED_HEALTH_STATUS));
     }
 }

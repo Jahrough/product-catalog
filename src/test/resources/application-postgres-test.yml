@@ -1,0 +1,39 @@
+# application-postgres-test.yml
+#
+# PostgreSQL integration-test profile.
+# Uses a real PostgreSQL instance (typically Testcontainers) and the
+# application's Flyway migrations to validate database compatibility.
+
+spring:
+  jpa:
+    hibernate:
+      # Validate entity mappings against the migrated schema.
+      # Flyway owns schema creation and evolution; Hibernate must not modify it.
+      ddl-auto: validate
+
+    # Avoid duplicate SQL output during integration tests.
+    # Use logging.level.org.hibernate.SQL=DEBUG when SQL diagnostics are needed.
+    show-sql: false
+
+  flyway:
+    # Apply application migrations against the test PostgreSQL database.
+    # Migration failures should prevent the application context from starting.
+    enabled: true
+
+  data:
+    redis:
+      # Bound Redis connection and command waits to reduce delays when a
+      # dependency is unavailable. Host and port are supplied by the base
+      # configuration or overridden dynamically by Testcontainers.
+      timeout: 2s
+
+logging:
+  level:
+    # Keep application logs informative without excessive debug output.
+    dev.jahlopez.productcatalog: INFO
+
+    # Keep Spring test framework diagnostics concise.
+    org.springframework.test: INFO
+
+    # Suppress generated SQL statements unless troubleshooting.
+    org.hibernate.SQL: WARN

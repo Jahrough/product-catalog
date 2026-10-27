@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
@@ -8,34 +8,45 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:productdb}
     username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:password}
-    driver-class-name: org.postgresql.Driver
+    password: ${DB_PASSWORD}
+    hikari:
+      pool-name: ProductCatalogHikariPool
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      validation-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: ${DB_POOL_MAX_LIFETIME:1500000}
+      keepalive-time: ${DB_POOL_KEEPALIVE_TIME:300000}
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 2000ms
+      connect-timeout: 2s
+      timeout: 2s
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
 
 # SpringDoc OpenAPI / Swagger UI Configuration for OpenApiConfig integration
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: ${SWAGGER_ENABLED:false}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${SWAGGER_ENABLED:false}
     tags-sorter: alpha
     operations-sorter: method
 
@@ -44,12 +55,15 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, prometheus, metrics
+        include: health,info,prometheus
+
   endpoint:
     health:
       probes:
         enabled: true
-      show-details: always
+      show-details: when-authorized
+      show-components: when-authorized
+
   prometheus:
     metrics:
       export:
@@ -57,7 +71,13 @@ management:
   # Micrometer Tracing & OpenTelemetry correlation configuration
   tracing:
     sampling:
-      probability: 1.0
+      probability: ${OTEL_TRACES_SAMPLING_PROBABILITY:0.1}
+
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  level:
+    org.hibernate.SQL: ${HIBERNATE_SQL_LOG_LEVEL:WARN}
+    org.hibernate.orm.jdbc.bind: WARN
