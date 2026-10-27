@@ -54,9 +54,10 @@ class OutboxRepositoryTest {
     void shouldSaveAndFindUnprocessedOutboxEvents() {
         // Arrange: Create an unprocessed outbox event
         OutboxEvent event = OutboxEvent.builder()
-                .aggregateType("PRODUCT")
+                .eventId(java.util.UUID.randomUUID())
+                .aggregateType("product")
                 .aggregateId("123")
-                .eventType("CREATED")
+                .eventType("ProductCreated")
                 .payload("{\"eventId\":\"test-uuid\",\"sku\":\"PROD-TEST-01\"}")
                 .processed(false)
                 .createdAt(LocalDateTime.now())
@@ -71,9 +72,9 @@ class OutboxRepositoryTest {
         assertThat(unprocessedEvents).hasSize(1);
         OutboxEvent fetched = unprocessedEvents.get(0);
         assertThat(fetched.getId()).isNotNull();
-        assertThat(fetched.getAggregateType()).isEqualTo("PRODUCT");
+        assertThat(fetched.getAggregateType()).isEqualTo("product");
         assertThat(fetched.getAggregateId()).isEqualTo("123");
-        assertThat(fetched.getEventType()).isEqualTo("CREATED");
+        assertThat(fetched.getEventType()).isEqualTo("ProductCreated");
         assertThat(fetched.isProcessed()).isFalse();
         assertThat(fetched.getPayload()).contains("PROD-TEST-01");
     }

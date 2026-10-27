@@ -173,7 +173,7 @@ class ProductIntegrationTest {
         // Verify outbox event was created atomically alongside the product
         List<OutboxEvent> outboxEvents = outboxRepository.findAll();
         assertThat(outboxEvents).hasSize(1);
-        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("CREATED");
+        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("ProductCreated");
 
         // Inspect Redis cache instance directly to verify caching mechanism
         Cache productCache = cacheManager.getCache("productsById");

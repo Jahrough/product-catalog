@@ -18,10 +18,12 @@ CREATE INDEX idx_products_name ON products(name);
 -- Create outbox table for the Transactional Outbox pattern (reliable event publishing via CDC)
 CREATE TABLE outbox (
     id BIGSERIAL PRIMARY KEY,
+    event_id UUID NOT NULL UNIQUE,
     aggregate_type VARCHAR(100) NOT NULL,
     aggregate_id VARCHAR(100) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
     payload TEXT NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processed BOOLEAN NOT NULL DEFAULT FALSE
 );

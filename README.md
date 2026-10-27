@@ -220,11 +220,17 @@ JaCoCo report generation is configured after tests. A generated report does not 
 
 The `OutboxEvent` entity maps to the PostgreSQL `outbox` table and stores:
 
-- `aggregateType` and `aggregateId`
-- `eventType`
-- `payload` (JSON serialized as text)
+- `eventId` (UUID, unique; matches `eventId` in the payload)
+- `aggregateType` (`product`) and `aggregateId`
+- `eventType` (`ProductCreated` / `ProductDeleted`)
+- `payload` (JSON serialized as text, using Product Event schema version 1)
+- `schemaVersion` (Debezium Connect schema metadata)
 - `createdAt`
 - `processed` status
+
+The V2 migration adds `schema_version` with a default of `1`; new event payloads
+also include `schemaVersion: 1`. Product Search validates the expanded JSON
+payload against its versioned event schema before processing.
 
 The repository exposes `findByProcessed(boolean)` for querying records by processing status. Current tests verify that product creation and deletion persist corresponding outbox records, and that unprocessed records can be retrieved.
 

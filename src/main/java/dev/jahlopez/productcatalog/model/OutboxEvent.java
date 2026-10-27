@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Entity representing an outbox event stored transactionally in PostgreSQL
@@ -32,17 +33,24 @@ public class OutboxEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "event_id", nullable = false, unique = true, updatable = false)
+    private UUID eventId;
+
     @Column(nullable = false)
-    private String aggregateType; // e.g., "PRODUCT"
+    private String aggregateType; // e.g., "product"
 
     @Column(nullable = false)
     private String aggregateId;   // e.g., Product ID or SKU
 
     @Column(nullable = false)
-    private String eventType;     // e.g., "CREATED", "DELETED"
+    private String eventType;     // e.g., "ProductCreated", "ProductDeleted"
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String payload;       // JSON string of the event payload
+
+    @Column(name = "schema_version", nullable = false)
+    @Builder.Default
+    private Integer schemaVersion = 1;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

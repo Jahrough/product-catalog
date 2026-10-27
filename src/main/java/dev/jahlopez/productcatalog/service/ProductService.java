@@ -50,6 +50,7 @@ public class ProductService {
 
         // Construct the domain event with version and metadata
         ProductEvent event = ProductEvent.builder()
+                .schemaVersion(1)
                 .eventId(UUID.randomUUID())
                 .version(savedProduct.getVersion())
                 .productId(savedProduct.getId())
@@ -62,7 +63,7 @@ public class ProductService {
                 .build();
 
         // Transactionally save event intent to the outbox table
-        saveOutboxEvent(savedProduct.getId().toString(), "CREATED", event);
+        saveOutboxEvent(savedProduct.getId().toString(), "ProductCreated", event);
 
         return productMapper.toResponseDto(savedProduct);
     }
@@ -128,6 +129,7 @@ public class ProductService {
 
         // Construct the domain event with version metadata before deletion
         ProductEvent event = ProductEvent.builder()
+                .schemaVersion(1)
                 .eventId(UUID.randomUUID())
                 .version(product.getVersion())
                 .productId(product.getId())
@@ -140,7 +142,7 @@ public class ProductService {
                 .build();
 
         // Transactionally save event intent to the outbox table
-        saveOutboxEvent(product.getId().toString(), "DELETED", event);
+        saveOutboxEvent(product.getId().toString(), "ProductDeleted", event);
 
         productRepository.delete(product);
     }
@@ -152,10 +154,12 @@ public class ProductService {
         try {
             String payload = objectMapper.writeValueAsString(event);
             OutboxEvent outboxEvent = OutboxEvent.builder()
-                    .aggregateType("PRODUCT")
+                    .eventId(event.eventId())
+                    .aggregateType("product")
                     .aggregateId(aggregateId)
                     .eventType(eventType)
                     .payload(payload)
+                    .schemaVersion(event.schemaVersion())
                     .processed(false)
                     .build();
 

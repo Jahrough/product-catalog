@@ -14,6 +14,7 @@ import java.util.UUID;
  */
 @Builder
 public record ProductEvent(
+        Integer schemaVersion,
         UUID eventId,
         Long version,
         Long productId,

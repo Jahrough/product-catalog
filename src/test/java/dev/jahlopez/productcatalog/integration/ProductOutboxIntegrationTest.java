@@ -79,9 +79,10 @@ class ProductOutboxIntegrationTest {
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent event = outboxEvents.get(0);
-        assertThat(event.getAggregateType()).isEqualTo("PRODUCT");
+        assertThat(event.getAggregateType()).isEqualTo("product");
+        assertThat(event.getEventId()).isNotNull();
         assertThat(event.getAggregateId()).isEqualTo(created.getId().toString());
-        assertThat(event.getEventType()).isEqualTo("CREATED");
+        assertThat(event.getEventType()).isEqualTo("ProductCreated");
         assertThat(event.isProcessed()).isFalse();
         assertThat(event.getPayload()).contains("Stream Deck");
     }
@@ -104,9 +105,10 @@ class ProductOutboxIntegrationTest {
         assertThat(outboxEvents).hasSize(1);
 
         OutboxEvent event = outboxEvents.get(0);
-        assertThat(event.getAggregateType()).isEqualTo("PRODUCT");
+        assertThat(event.getAggregateType()).isEqualTo("product");
+        assertThat(event.getEventId()).isNotNull();
         assertThat(event.getAggregateId()).isEqualTo(created.getId().toString());
-        assertThat(event.getEventType()).isEqualTo("DELETED");
+        assertThat(event.getEventType()).isEqualTo("ProductDeleted");
         assertThat(event.isProcessed()).isFalse();
     }
 
