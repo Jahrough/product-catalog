@@ -1,154 +1,188 @@
 # Product Catalog Service
 
-A Java 25 / Spring Boot REST service for managing product catalog data. The project focuses on a maintainable API, PostgreSQL persistence and migrations, request validation, caching configuration, automated tests, containerization, and a CI workflow.
+A Java 25 / Spring Boot REST API for managing products, persisted in PostgreSQL. The application uses Flyway for schema evolution, Redis-backed Spring caching for reads, and a transactional outbox table for product lifecycle event intents.
 
-> **Implementation status:** The repository includes a PostgreSQL-backed transactional outbox model and tests for persisting product lifecycle events. Outbox-to-Kafka publishing or Debezium CDC delivery should not be considered implemented until the publisher/connector and end-to-end delivery have been configured and verified.
-
-## Contents
-
-- [Architecture](#architecture)
-- [Technology stack](#technology-stack)
-- [Project structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Configuration](#configuration)
-- [Run locally](#run-locally)
-- [Docker](#docker)
-- [API](#api)
-- [API documentation](#api-documentation)
-- [Testing](#testing)
-- [Transactional outbox](#transactional-outbox)
-- [Observability and health](#observability-and-health)
-- [CI and container publishing](#ci-and-container-publishing)
-- [Design considerations and next steps](#design-considerations-and-next-steps)
+The outbox records are persisted but are **not currently published** to Kafka or another broker. A separate polling publisher or CDC connector and end-to-end delivery verification are required before the service provides downstream event delivery.
 
 ## Architecture
 
-The current service is organized as a Spring Boot application with a REST controller, service layer, JPA repositories, and PostgreSQL persistence.
-
 ```text
-Client
-  |
-  v
-Product Catalog REST API (Spring Boot)
-  |
-  v
-ProductService
-  |                         \
-  v                          v
-PostgreSQL product data   PostgreSQL outbox records
-  |
-  v
-Flyway-managed schema
+HTTP client
+    |
+    v
+ProductController -> ProductService -> ProductRepository -> PostgreSQL
+                            |                 Flyway migrations
+                            +---------------> OutboxRepository -> outbox table
+                            |
+                            +---------------> Redis caches (read operations)
 ```
 
-Redis connection and Spring caching dependencies are configured in the application. Actual cache behavior depends on the service's cache annotations and runtime configuration.
+`ProductController` maps HTTP requests to service operations and DTOs. `ProductService` owns transaction boundaries, product version changes, cache eviction, and atomic persistence of product changes with outbox records. PostgreSQL is the source of truth; Redis is a cache, not a persistence substitute. No authentication or authorization implementation is included.
 
-The outbox provides a place to persist product events in PostgreSQL. A separate publisher or CDC connector is required to deliver these records to Kafka or another event broker. A downstream search service and search index are architectural extensions; they are not claimed here as part of this service's verified runtime behavior.
+## Technology
 
-## Technology stack
+- Java 25 and Spring Boot 4.1.2
+- Spring MVC, Spring Data JPA, Jakarta Bean Validation, and Flyway
+- PostgreSQL; Redis with Spring Cache
+- SpringDoc OpenAPI / Swagger UI
+- MapStruct and Lombok
+- JUnit 5, Spring Boot Test, MockMvc, Mockito, H2, and Testcontainers
+- Gradle Kotlin DSL and JaCoCo
+- Docker and GitHub Actions
 
-- **Language/runtime:** Java 25 (LTS)
-- **Application framework:** Spring Boot 4.1.2, Spring MVC
-- **Persistence:** Spring Data JPA, PostgreSQL
-- **Schema migrations:** Flyway
-- **Caching integration:** Spring Cache and Spring Data Redis
-- **API documentation:** SpringDoc OpenAPI / Swagger UI
-- **Observability dependencies:** Spring Boot Actuator, Micrometer Prometheus registry, Micrometer tracing bridge, OpenTelemetry Zipkin exporter, Logstash Logback Encoder
-- **Mapping:** MapStruct
-- **Testing:** JUnit 5, Spring Boot Test, MockMvc, Mockito, AssertJ, H2, Testcontainers for PostgreSQL and Redis
-- **Build:** Gradle Kotlin DSL, JaCoCo
-- **Containerization / CI:** Docker and GitHub Actions; Trivy image scanning and GitHub Container Registry publishing as configured in the workflow
+Actuator, Prometheus metrics, Micrometer tracing, and logging dependencies are present. Their presence does not mean an external metrics scraper or trace backend is running; see [Observability](#observability).
 
-Dependency presence does not by itself mean that a tracing backend, metrics scraper, Kafka publisher, or production deployment is running. See the relevant sections below.
-
-## Project structure
+## Project layout
 
 ```text
-product-catalog/
-├── build.gradle.kts
-├── settings.gradle.kts
-├── gradlew
-├── Dockerfile
-├── src/
-│   ├── main/
-│   │   ├── java/dev/jahlopez/productcatalog/
-│   │   │   ├── config/
-│   │   │   ├── controller/
-│   │   │   ├── dto/
-│   │   │   ├── event/
-│   │   │   ├── exception/
-│   │   │   ├── mapper/
-│   │   │   ├── model/
-│   │   │   ├── repository/
-│   │   │   └── service/
-│   │   └── resources/
-│   │       ├── application.yml
-│   │       └── db/migration/
-│   └── test/java/dev/jahlopez/productcatalog/
-│       ├── controller/
-│       ├── integration/
-│       └── repository/
-└── .github/workflows/
+src/main/java/dev/jahlopez/productcatalog/
+├── config/       # JPA auditing, OpenAPI, Redis caches
+├── controller/   # REST endpoints
+├── dto/          # API request and response types
+├── event/        # Product lifecycle event payload
+├── exception/    # Not-found and API exception handling
+├── mapper/       # MapStruct DTO/entity mappings
+├── model/        # JPA product and outbox entities
+├── repository/   # Spring Data repositories
+└── service/      # Business operations and transaction boundaries
+src/main/resources/
+├── application.yml
+└── db/migration/ # Flyway V1 and V2 migrations
+src/test/java/    # Controller, unit, repository, and integration tests
 ```
 
-This is a representative layout; the exact package contents may evolve as the project develops.
-
-## Prerequisites
+## Prerequisites and configuration
 
 - JDK 25
-- Docker Desktop or another working Docker Engine for Testcontainers and container builds
-- PostgreSQL for local application runs
-- Redis if the configured cache integration is required by the active application configuration
+- PostgreSQL for local runs
+- Redis for cache-backed application operations
+- Docker for Testcontainers integration tests and Docker image builds
 
-## Configuration
-
-The application configuration uses these environment variables:
+`src/main/resources/application.yml` reads the following environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DB_HOST` | `localhost` | PostgreSQL hostname |
+| `SERVER_PORT` | `8080` | HTTP port |
+| `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `productdb` | Database name |
-| `DB_USER` | `postgres` | Database username |
-| `DB_PASSWORD` | `password` | Database password; local-development default only |
-| `REDIS_HOST` | `localhost` | Redis hostname |
+| `DB_USER` | `postgres` | Database user |
+| `DB_PASSWORD` | **Required** | Database password; no default is configured |
+| `DB_POOL_MAX_SIZE` | `10` | Hikari maximum pool size |
+| `DB_POOL_MIN_IDLE` | `2` | Hikari minimum idle connections |
+| `DB_POOL_MAX_LIFETIME` | `1500000` | Maximum connection lifetime in milliseconds |
+| `DB_POOL_KEEPALIVE_TIME` | `300000` | Connection keepalive interval in milliseconds |
+| `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
-| `TRACING_SAMPLING_PROBABILITY` | `1.0` in the suggested configuration | Trace sampling probability, if configured in `application.yml` |
+| `FLYWAY_BASELINE_ON_MIGRATE` | `false` | Whether Flyway baselines an existing schema |
+| `SWAGGER_ENABLED` | `false` | Enables the OpenAPI JSON and Swagger UI endpoints |
+| `OTEL_TRACES_SAMPLING_PROBABILITY` | `0.1` | Configured trace sampling probability |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | Configured OTLP endpoint |
 
-The datasource URL is assembled from the `DB_*` variables. When running inside Docker Compose, use the database/cache service names as hostnames rather than `localhost`.
+Use environment variables or a secret manager for credentials. Do not use sample credentials in shared environments. `FLYWAY_BASELINE_ON_MIGRATE` is intended only for deliberate adoption of Flyway against an existing database; it is not needed for a fresh database.
 
-**Security note:** Do not use the example database password in shared, staging, or production environments. Supply secrets through an appropriate secret-management mechanism.
-
-The application uses Hibernate schema validation (`ddl-auto: validate`) and Flyway migrations. The database schema must therefore be created and maintained by the migration scripts before Hibernate validates it. `baseline-on-migrate` should be enabled only when deliberately adopting Flyway for a pre-existing schema.
+Hibernate runs with `ddl-auto: validate`; Flyway owns schema creation and changes. Redis host/port settings configure the connection used by the named product caches.
 
 ## Run locally
 
-1. Start PostgreSQL and create the configured database (default: `productdb`).
-2. Start Redis if it is required by the application's active configuration.
-3. Set environment variables as needed.
-4. Start the application:
+Create the `productdb` PostgreSQL database, start Redis, set `DB_PASSWORD`, then run:
 
 ```bash
+export DB_PASSWORD='your-local-password'
 ./gradlew bootRun
 ```
 
-Run the unit and application test suite with:
+Run the full build and tests with Java 25:
 
 ```bash
-./gradlew test
+JAVA_HOME=$(/usr/libexec/java_home -v 25) ./gradlew clean build --no-configuration-cache
 ```
 
-Generate JaCoCo reports with:
+The project also supports focused tests, for example:
 
 ```bash
-./gradlew jacocoTestReport
+./gradlew test --tests "dev.jahlopez.productcatalog.controller.ProductControllerTest"
+./gradlew test --tests "dev.jahlopez.productcatalog.service.ProductServiceTest"
+./gradlew test --tests "dev.jahlopez.productcatalog.integration.FlywayMigrationIntegrationTest"
 ```
 
-The HTML report is generated under `build/reports/jacoco/test/html/`; the XML report is generated under `build/reports/jacoco/test/jacocoTestReport.xml`.
+Testcontainers tests require a working Docker environment. Review the Gradle test report for executed, failed, and skipped tests; a successful Gradle task alone does not establish that Docker-backed tests ran.
 
-## Docker
+JaCoCo reports are written to `build/reports/jacoco/test/html/` and `build/reports/jacoco/test/jacocoTestReport.xml`. No coverage threshold is configured.
 
-The Dockerfile uses a multi-stage build with a Java 25 JDK build stage and a Java 25 JRE runtime stage. The runtime image runs the application as a non-root user and exposes port `8080`. The image build skips tests (`bootJar -x test`), so tests should run in CI before the image is published.
+## Database migrations
+
+Flyway applies migrations in version order from `src/main/resources/db/migration/`.
+
+- **V1 (`V1__init_schema.sql`) is the initial schema migration and is immutable once applied.** Do not edit an applied migration; checksums are part of Flyway's migration history.
+- **V2 (`V2__enforce_product_versions_and_outbox_constraints.sql`) is a forward migration.** It shifts legacy product and outbox event versions from zero-based to one-based together, changes product versions to integers, and adds positive-version and payload constraints. It rejects malformed or out-of-range legacy data rather than silently accepting it.
+- Future schema changes should be added as new versioned migrations (for example V3), not made by changing V1 or an already-applied V2.
+
+For a fresh database, Flyway runs V1 and V2. Hibernate then validates the resulting schema against the JPA entities.
+
+## API
+
+All product routes use `/api/v1/products`. Successful responses use JSON except for `DELETE`, which returns no content.
+
+| Method | Path | Success | Behavior |
+|---|---|---:|---|
+| `POST` | `/api/v1/products` | `201 Created` | Create a product |
+| `PUT` | `/api/v1/products/{id}` | `200 OK` | Replace product fields and increment its aggregate version |
+| `GET` | `/api/v1/products` | `200 OK` | List all products |
+| `GET` | `/api/v1/products/{id}` | `200 OK` | Retrieve by database ID |
+| `GET` | `/api/v1/products/sku/{sku}` | `200 OK` | Retrieve by SKU |
+| `DELETE` | `/api/v1/products/{id}` | `204 No Content` | Delete by database ID and record a deletion event |
+
+`POST` and `PUT` request bodies contain `sku`, `name`, `price`, and `stockQuantity`; `description` is optional. SKU and name must not be blank, price must be greater than zero, and stock quantity must be zero or greater. Missing products return `404 Not Found`. Bean validation errors return `400 Bad Request`. Unexpected errors return `500 Internal Server Error` with a generic client-facing message. Duplicate SKU violations are not currently translated into a dedicated `409 Conflict` response.
+
+Example request:
+
+```json
+{
+  "sku": "PROD-HUB-001",
+  "name": "USB-C Multiport Hub",
+  "description": "Aluminum 7-in-1 adapter",
+  "price": 49.99,
+  "stockQuantity": 150
+}
+```
+
+The standard error response contains `status`, `errorCode`, `message`, `path`, and `timestamp`; validation errors also include `validationErrors` with field names and messages. Error codes currently include `RESOURCE_NOT_FOUND`, `INVALID_REQUEST_PAYLOAD`, and `INTERNAL_SERVER_ERROR`.
+
+All three named Redis caches (`productsById`, `productsBySku`, and `productsList`) are evicted after writes. Reads are cacheable with configured TTLs of 30 minutes for individual products and 15 minutes for lists.
+
+## OpenAPI
+
+OpenAPI endpoints are disabled by default. Enable them when starting the application with:
+
+```bash
+SWAGGER_ENABLED=true ./gradlew bootRun
+```
+
+Then open `http://localhost:8080/swagger-ui.html` or `http://localhost:8080/v3/api-docs`. The application does not implement bearer-token security; these routes are not protected by an authentication layer.
+
+## Transactional outbox
+
+For create, update, and delete operations, the product mutation and its outbox row are written within the same service transaction. A failure to persist either operation rolls back the transaction. Updates and deletes acquire a pessimistic write lock for the product row before calculating the next event version, serializing concurrent changes to the same product.
+
+The `outbox` row contains `eventId`, `aggregateType` (`product`), `aggregateId` (product ID as a string), `eventType` (`ProductCreated`, `ProductUpdated`, or `ProductDeleted`), JSON `payload`, `schemaVersion`, `createdAt`, and `processed`. `processed` defaults to `false`.
+
+The version-1 JSON payload represents `ProductEvent` and includes `schemaVersion`, `eventId`, `version`, `productId`, `sku`, `name`, `description`, `price`, `stockQuantity`, `eventType`, and `timestamp`. The payload's `eventType` is the enum value `CREATED`, `UPDATED`, or `DELETED`. Product creation starts at version 1; each update increments it by one. A delete event uses the next version as a tombstone, while the product row itself is removed.
+
+`OutboxRepository.findByProcessed(false)` supports a future polling publisher. No publisher, Kafka client, or CDC connector is configured in this repository, so the outbox currently provides durable event intent only—not delivery, retries, deduplication, or ordering guarantees for consumers.
+
+## Observability
+
+The configured Actuator web endpoints include health, info, and Prometheus. With the application running:
+
+- Health: `http://localhost:8080/actuator/health`
+- Liveness: `http://localhost:8080/actuator/health/liveness`
+- Readiness: `http://localhost:8080/actuator/health/readiness`
+- Prometheus: `http://localhost:8080/actuator/prometheus`
+
+`/actuator/metrics` is not included in the configured web exposure list. Prometheus metrics are only useful to external monitoring when a scraper is configured. Tracing libraries and OTLP-related properties exist, but this repository does not verify trace export to a collector.
+
+## Docker and CI
 
 Build the image from the repository root:
 
@@ -156,128 +190,17 @@ Build the image from the repository root:
 docker build -t product-catalog:local .
 ```
 
-Run it with PostgreSQL on the host (Docker Desktop for macOS/Windows supports `host.docker.internal`):
+The multi-stage Dockerfile builds with a Java 25 JDK and runs on a Java 25 JRE as a non-root user on port 8080. The image build skips tests; run the Gradle test/build command separately. The container requires reachable PostgreSQL and Redis services. For example, when those services are running on the host under Docker Desktop:
 
 ```bash
 docker run --rm --name product-catalog \
   -p 8080:8080 \
   -e DB_HOST=host.docker.internal \
-  -e DB_PORT=5432 \
   -e DB_NAME=productdb \
   -e DB_USER=postgres \
-  -e DB_PASSWORD=change-me \
+  -e DB_PASSWORD='your-local-password' \
   -e REDIS_HOST=host.docker.internal \
-  -e REDIS_PORT=6379 \
   product-catalog:local
 ```
 
-Replace the sample credentials. If PostgreSQL or Redis is not available on the host, change the host settings or run the application and dependencies on the same Docker network. This example supplies connection settings; it does not start PostgreSQL or Redis for you.
-
-## API
-
-The controller tests exercise the following routes. Confirm the controller implementation before treating this list as a complete API contract.
-
-| Method | Path | Tested behavior |
-|---|---|---|
-| `GET` | `/api/v1/products` | Returns a JSON list of products (`200 OK`) |
-| `GET` | `/api/v1/products/{id}` | Returns a product (`200 OK`) or not found (`404 Not Found`) |
-| `POST` | `/api/v1/products` | Creates a product (`201 Created`) or rejects invalid input (`400 Bad Request`) |
-| `DELETE` | `/api/v1/products/{id}` | Deletes a product (`204 No Content`) or returns not found (`404 Not Found`) |
-
-Request validation is exercised in the controller test for an invalid SKU/name and negative price. The service is verified not to be called when that request is rejected.
-
-## API documentation
-
-With the application running, SpringDoc is configured for:
-
-- Swagger UI: `http://localhost:8080/swagger-ui.html`
-- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
-
-The final Swagger UI route can depend on SpringDoc version and configuration; if the first URL redirects or returns 404, try `http://localhost:8080/swagger-ui/index.html`.
-
-## Testing
-
-The test suite includes distinct test layers:
-
-- **Controller slice tests:** `@WebMvcTest` with MockMvc and a mocked `ProductService`, covering HTTP status codes, JSON response fields, validation, and not-found handling.
-- **Repository tests:** `@DataJpaTest` with PostgreSQL Testcontainers for outbox persistence and querying unprocessed records.
-- **Service integration tests:** `@SpringBootTest` with PostgreSQL and Redis Testcontainers to exercise product operations and inspect outbox records.
-- **Mapper tests:** verify DTO/entity mapping behavior.
-
-Testcontainers requires a working Docker environment. If Docker is unavailable, container-backed tests may be skipped or fail to start; a successful Gradle process alone should not be interpreted as proof that skipped integration tests executed. Check the Gradle test report for passed, failed, and skipped counts.
-
-Run an individual test class, for example:
-
-```bash
-./gradlew test --tests "dev.jahlopez.productcatalog.unit.mapper.controller.ProductControllerTest"
-./gradlew test --tests "dev.jahlopez.productcatalog.unit.mapper.repository.OutboxRepositoryTest"
-./gradlew test --tests "dev.jahlopez.productcatalog.integration.ProductOutboxIntegrationTest"
-```
-
-JaCoCo report generation is configured after tests. A generated report does not enforce a minimum coverage threshold unless a coverage-verification task is configured and included in the CI command.
-
-## Transactional outbox
-
-The `OutboxEvent` entity maps to the PostgreSQL `outbox` table and stores:
-
-- `eventId` (UUID, unique; matches `eventId` in the payload)
-- `aggregateType` (`product`) and `aggregateId`
-- `eventType` (`ProductCreated` / `ProductUpdated` / `ProductDeleted`)
-- `payload` (JSON serialized as text, using Product Event schema version 1)
-- `schemaVersion` (Debezium Connect schema metadata)
-- `createdAt`
-- `processed` status
-
-The V2 migration enforces one-based product versions and positive integer
-versions in JSON outbox payloads. It shifts legacy zero-based
-product and outbox versions together, preserving their event ordering. The
-outbox columns include the identifiers, aggregate metadata, payload, schema
-version, creation timestamp, and processing flag used by an outbox CDC router.
-
-The repository exposes `findByProcessed(boolean)` for querying records by processing status. Current tests verify that product creation and deletion persist corresponding outbox records, and that unprocessed records can be retrieved.
-
-**Delivery limitation:** An outbox table and repository query do not publish events on their own. Before claiming end-to-end delivery, implement and test either a reliable polling publisher or a configured CDC path such as Debezium/Kafka Connect. Verify transaction atomicity, retries, duplicate delivery/idempotency, ordering/version handling, and outbox retention/cleanup. No Kafka client or Kafka Testcontainers dependency is present in the supplied `build.gradle.kts`, so Kafka publishing is not documented as currently verified.
-
-## Observability and health
-
-The supplied configuration exposes Actuator endpoints for health, info, Prometheus metrics, and metrics, and enables Spring Boot health probes. Common endpoints are:
-
-- Health: `http://localhost:8080/actuator/health`
-- Liveness: `http://localhost:8080/actuator/health/liveness`
-- Readiness: `http://localhost:8080/actuator/health/readiness`
-- Prometheus: `http://localhost:8080/actuator/prometheus`
-- Metrics: `http://localhost:8080/actuator/metrics`
-
-These URLs assume the app is running on port 8080 and that the supplied configuration is active. Endpoint exposure does not mean an external Prometheus server is scraping metrics. Likewise, tracing dependencies and a sampling setting do not prove spans reach a collector; ensure the exporter dependency, endpoint, and backend configuration agree before claiming tracing is operational.
-
-For non-local environments, avoid exposing detailed health information to unauthenticated callers and choose a trace-sampling rate appropriate for traffic and cost.
-
-## CI and container publishing
-
-The supplied GitHub Actions workflow is configured to:
-
-1. Run `./gradlew test` using Temurin Java 25.
-2. Build a Docker image and scan it with Trivy for `HIGH` and `CRITICAL` findings, uploading SARIF results to GitHub Code Scanning.
-3. On a push to `main`, publish the image to GitHub Container Registry (GHCR) after the required preceding jobs succeed.
-4. Tag the image with the commit SHA and `latest`.
-
-The vulnerability scan is limited to the configured severities and scanner behavior; it does not prove the image is vulnerability-free. Pin third-party GitHub Actions to reviewed versions or commit SHAs instead of mutable branches, and keep workflow permissions minimal. The workflow publishes an image; it does not by itself demonstrate deployment to Kubernetes/EKS.
-
-## Design considerations and next steps
-
-Potential next steps, to be marked complete only after implementation and verification:
-
-- Add/verify a reliable outbox publisher or Debezium CDC connector and end-to-end event delivery tests.
-- Add rollback/atomicity tests proving product changes and outbox records commit or roll back together.
-- Assert outbox payload fields by parsing JSON rather than checking only for a substring.
-- Add tests for product updates, malformed JSON, invalid path IDs, and individual validation constraints where supported by the controller contract.
-- Verify Redis cache behavior with tests and confirm cache invalidation on product changes.
-- Align OTLP/Zipkin dependencies and endpoint configuration, then verify trace export to a running backend.
-- Add a deliberate JaCoCo coverage threshold and run `./gradlew check` in CI if coverage enforcement is desired.
-- Add deployment manifests and runtime verification before claiming Kubernetes/EKS deployment support.
-
----
-
-## License
-
-Add the repository's chosen license here. Until a license is selected and included in the repository, reuse and redistribution terms should not be assumed.
+The GitHub Actions workflow runs tests with Java 25, builds and scans the image with Trivy for high and critical findings, and publishes to GHCR on pushes to `main`. The workflow publishes a container image; it does not deploy the application to a hosting platform.

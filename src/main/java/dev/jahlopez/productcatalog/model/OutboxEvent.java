@@ -17,8 +17,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entity representing an outbox event stored transactionally in PostgreSQL
- * to support reliable, decoupled event publishing via Debezium CDC or an outbox poller.
+ * Entity representing an event intent stored in PostgreSQL in the same
+ * transaction as its product change. A separate publisher or CDC connector
+ * is required to deliver the event to downstream systems.
  */
 @Entity
 @Table(name = "outbox")
@@ -37,16 +38,16 @@ public class OutboxEvent {
     private UUID eventId;
 
     @Column(nullable = false)
-    private String aggregateType; // e.g., "product"
+    private String aggregateType;
 
     @Column(nullable = false)
-    private String aggregateId;   // e.g., Product ID or SKU
+    private String aggregateId;
 
     @Column(nullable = false)
-    private String eventType;     // e.g., "ProductCreated", "ProductDeleted"
+    private String eventType;
 
     @Column(columnDefinition = "TEXT", nullable = false)
-    private String payload;       // JSON string of the event payload
+    private String payload;
 
     @Column(name = "schema_version", nullable = false)
     @Builder.Default
