@@ -222,15 +222,17 @@ The `OutboxEvent` entity maps to the PostgreSQL `outbox` table and stores:
 
 - `eventId` (UUID, unique; matches `eventId` in the payload)
 - `aggregateType` (`product`) and `aggregateId`
-- `eventType` (`ProductCreated` / `ProductDeleted`)
+- `eventType` (`ProductCreated` / `ProductUpdated` / `ProductDeleted`)
 - `payload` (JSON serialized as text, using Product Event schema version 1)
 - `schemaVersion` (Debezium Connect schema metadata)
 - `createdAt`
 - `processed` status
 
-The V2 migration adds `schema_version` with a default of `1`; new event payloads
-also include `schemaVersion: 1`. Product Search validates the expanded JSON
-payload against its versioned event schema before processing.
+The V2 migration enforces one-based product versions and positive integer
+versions in JSON outbox payloads. It shifts legacy zero-based
+product and outbox versions together, preserving their event ordering. The
+outbox columns include the identifiers, aggregate metadata, payload, schema
+version, creation timestamp, and processing flag used by an outbox CDC router.
 
 The repository exposes `findByProcessed(boolean)` for querying records by processing status. Current tests verify that product creation and deletion persist corresponding outbox records, and that unprocessed records can be retrieved.
 
