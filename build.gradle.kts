@@ -98,6 +98,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("-Xshare:off")
     finalizedBy(tasks.jacocoTestReport) // Automatically generate coverage report after tests run
 }
 
