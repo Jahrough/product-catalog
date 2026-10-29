@@ -1,5 +1,6 @@
 package dev.jahlopez.productcatalog.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -212,6 +214,30 @@ class ProductServiceTest {
         verify(productMapper, times(1)).toResponseDto(savedProduct);
         verify(objectMapper, times(1)).writeValueAsString(any());
         verify(outboxRepository, times(1)).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    void createProduct_whenEventSerializationFails_shouldNotSaveOutboxEvent() throws Exception {
+        ProductRequestDto request = new ProductRequestDto();
+        Product product = Product.builder()
+                .id(1L)
+                .sku("PROD-WIR-001")
+                .name("Wireless Charger")
+                .price(new BigDecimal("29.99"))
+                .stockQuantity(40)
+                .version(1)
+                .build();
+
+        when(productMapper.toEntity(request)).thenReturn(product);
+        when(productRepository.save(product)).thenReturn(product);
+        when(objectMapper.writeValueAsString(any()))
+                .thenThrow(new JsonProcessingException("serialization failure") {});
+
+        assertThatThrownBy(() -> productService.createProduct(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Failed to serialize outbox event");
+
+        verifyNoInteractions(outboxRepository);
     }
 
     /**

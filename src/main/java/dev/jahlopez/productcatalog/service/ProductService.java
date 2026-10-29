@@ -1,5 +1,6 @@
 package dev.jahlopez.productcatalog.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
@@ -113,7 +114,7 @@ public class ProductService {
     }
 
     /**
-     * Retrieves a complete list of all active products in the catalog.
+     * Retrieves all products in the catalog.
      * Results are cached under the 'productsList' cache tier.
      *
      * @return a list of all product response DTOs
@@ -165,25 +166,28 @@ public class ProductService {
     }
 
     /**
-     * Helper method to serialize a domain event and persist it into the outbox table.
+     * Serializes a domain event and persists it into the outbox table.
      */
     private void saveOutboxEvent(String aggregateId, String eventType, ProductEvent event) {
+        String payload;
         try {
-            String payload = objectMapper.writeValueAsString(event);
-            OutboxEvent outboxEvent = OutboxEvent.builder()
-                    .eventId(event.eventId())
-                    .aggregateType("product")
-                    .aggregateId(aggregateId)
-                    .eventType(eventType)
-                    .payload(payload)
-                    .schemaVersion(event.schemaVersion())
-                    .processed(false)
-                    .build();
-
-            outboxRepository.save(outboxEvent);
-        } catch (Exception e) {
-            log.error("Failed to serialize and save outbox event for aggregateId: {}", aggregateId, e);
-            throw new RuntimeException("Failed to persist outbox event", e);
+            payload = objectMapper.writeValueAsString(event);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize outbox event for aggregateId: {}", aggregateId, e);
+            throw new IllegalStateException("Failed to serialize outbox event", e);
         }
+
+        // Store routing metadata in columns as well as the complete event payload for consumers.
+        OutboxEvent outboxEvent = OutboxEvent.builder()
+                .eventId(event.eventId())
+                .aggregateType("product")
+                .aggregateId(aggregateId)
+                .eventType(eventType)
+                .payload(payload)
+                .schemaVersion(event.schemaVersion())
+                .processed(false)
+                .build();
+
+        outboxRepository.save(outboxEvent);
     }
 }

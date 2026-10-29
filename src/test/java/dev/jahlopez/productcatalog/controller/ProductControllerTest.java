@@ -129,6 +129,19 @@ class ProductControllerTest {
     }
 
     @Test
+    void createProduct_withMalformedJson_shouldReturnBadRequest() throws Exception {
+        mockMvc.perform(post(PRODUCTS_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"))
+                .andExpect(jsonPath("$.message").value(
+                        "The request contains a malformed body or invalid parameter."));
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
     void updateProduct_withValidData_shouldReturnUpdatedProductAndVersion() throws Exception {
         ProductRequestDto request = validProductRequest();
         ProductResponseDto response = ProductResponseDto.builder()
