@@ -92,10 +92,10 @@ export DB_PASSWORD='your-local-password'
 ./gradlew bootRun
 ```
 
-Run the full build and tests with Java 25:
+Run the test suite with Java 25:
 
 ```bash
-JAVA_HOME=$(/usr/libexec/java_home -v 25) ./gradlew clean build --no-configuration-cache
+JAVA_HOME=$(/usr/libexec/java_home -v 25) ./gradlew clean test --no-configuration-cache
 ```
 
 The project also supports focused tests, for example:
@@ -106,7 +106,9 @@ The project also supports focused tests, for example:
 ./gradlew test --tests "dev.jahlopez.productcatalog.integration.FlywayMigrationIntegrationTest"
 ```
 
-Testcontainers tests require a working Docker environment. Review the Gradle test report for executed, failed, and skipped tests; a successful Gradle task alone does not establish that Docker-backed tests ran.
+The integration and repository-slice tests use a shared PostgreSQL and Redis container pair for the test JVM. Full-application integration tests share one Spring Boot test context configuration; repository tests use a separate JPA slice context, and web slice tests use their own lightweight MVC context. The Flyway migration test retains an isolated PostgreSQL container because it creates and migrates multiple dedicated schemas. Testcontainers tests require a working Docker environment. Review the Gradle test report for executed, failed, and skipped tests; a successful Gradle task alone does not establish that Docker-backed tests ran.
+
+Spring test context cache statistics are enabled at DEBUG in `src/test/resources/logback-test.xml` to help verify context reuse. The Gradle test task loads Mockito's Java agent at startup to avoid dynamic agent attachment and disables class-data sharing for that test JVM because Mockito instrumentation modifies the bootstrap class path. These settings apply to test execution only.
 
 JaCoCo reports are written to `build/reports/jacoco/test/html/` and `build/reports/jacoco/test/jacocoTestReport.xml`. No coverage threshold is configured.
 
