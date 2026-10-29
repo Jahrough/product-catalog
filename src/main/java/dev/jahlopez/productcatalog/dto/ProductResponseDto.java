@@ -38,6 +38,9 @@ public class ProductResponseDto {
     @Schema(description = "Current available inventory stock quantity", example = "150", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer stockQuantity;
 
+    @Schema(description = "Monotonic aggregate version, starting at 1 and incremented on every update", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
+    private Long version;
+
     @Schema(description = "Timestamp indicating when the product record was created", example = "2026-10-13T10:30:00", accessMode = Schema.AccessMode.READ_ONLY)
     private LocalDateTime createdAt;
 

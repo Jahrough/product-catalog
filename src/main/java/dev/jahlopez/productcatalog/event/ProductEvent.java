@@ -26,6 +26,12 @@ public record ProductEvent(
         EventType eventType,
         LocalDateTime timestamp
 ) {
+    public ProductEvent {
+        if (version == null || version < 1) {
+            throw new IllegalArgumentException("Event version must be a positive integer");
+        }
+    }
+
     /**
      * Defines the type of lifecycle action that occurred for the product.
      */

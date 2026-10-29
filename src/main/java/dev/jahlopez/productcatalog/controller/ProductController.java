@@ -59,6 +59,29 @@ public class ProductController {
     }
 
     /**
+     * Updates an existing product and emits a ProductUpdated event with an incremented version.
+     *
+     * @param id         the product primary key ID
+     * @param requestDto the new product state
+     * @return the updated product response DTO
+     */
+    @Operation(
+            summary = "Update a product",
+            description = "Replaces product details, increments the aggregate version and evicts product cache entries."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Product successfully updated",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProductResponseDto.class))
+    )
+    @ApiWriteResponses
+    @PutMapping("/{id}")
+    public ResponseEntity<ProductResponseDto> updateProduct(@PathVariable Long id,
+                                                            @Valid @RequestBody ProductRequestDto requestDto) {
+        return ResponseEntity.ok(productService.updateProduct(id, requestDto));
+    }
+
+    /**
      * Retrieves product details by its database primary key.
      *
      * @param id the product primary key ID

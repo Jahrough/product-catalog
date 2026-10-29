@@ -48,22 +48,34 @@ public class ProductService {
         Product product = productMapper.toEntity(requestDto);
         Product savedProduct = productRepository.save(product);
 
-        // Construct the domain event with version and metadata
-        ProductEvent event = ProductEvent.builder()
-                .schemaVersion(1)
-                .eventId(UUID.randomUUID())
-                .version(savedProduct.getVersion())
-                .productId(savedProduct.getId())
-                .sku(savedProduct.getSku())
-                .name(savedProduct.getName())
-                .price(savedProduct.getPrice())
-                .stockQuantity(savedProduct.getStockQuantity())
-                .eventType(ProductEvent.EventType.CREATED)
-                .timestamp(LocalDateTime.now())
-                .build();
+        ProductEvent event = buildEvent(savedProduct, savedProduct.getVersion(), ProductEvent.EventType.CREATED);
 
         // Transactionally save event intent to the outbox table
         saveOutboxEvent(savedProduct.getId().toString(), "ProductCreated", event);
+
+        return productMapper.toResponseDto(savedProduct);
+    }
+
+    /**
+     * Updates an existing product, incrementing its version by one, and logs an UPDATED event to the outbox.
+     *
+     * @param id         the database primary key identifier
+     * @param requestDto the new product state
+     * @return the updated product response DTO
+     * @throws ProductNotFoundException if no product exists with the given ID
+     */
+    @Transactional
+    @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
+    public ProductResponseDto updateProduct(Long id, ProductRequestDto requestDto) {
+        Product product = productRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
+
+        productMapper.updateEntity(requestDto, product);
+        product.incrementVersion();
+        Product savedProduct = productRepository.saveAndFlush(product);
+
+        saveOutboxEvent(savedProduct.getId().toString(), "ProductUpdated",
+                buildEvent(savedProduct, savedProduct.getVersion(), ProductEvent.EventType.UPDATED));
 
         return productMapper.toResponseDto(savedProduct);
     }
@@ -124,27 +136,32 @@ public class ProductService {
     @Transactional
     @CacheEvict(value = {"productsById", "productsBySku", "productsList"}, allEntries = true)
     public void deleteProduct(Long id) {
-        Product product = productRepository.findById(id)
+        Product product = productRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
 
-        // Construct the domain event with version metadata before deletion
-        ProductEvent event = ProductEvent.builder()
-                .schemaVersion(1)
-                .eventId(UUID.randomUUID())
-                .version(product.getVersion())
-                .productId(product.getId())
-                .sku(product.getSku())
-                .name(product.getName())
-                .price(product.getPrice())
-                .stockQuantity(product.getStockQuantity())
-                .eventType(ProductEvent.EventType.DELETED)
-                .timestamp(LocalDateTime.now())
-                .build();
+        // Tombstone: the delete event carries current version + 1 so consumers can order it after all prior events
+        ProductEvent event = buildEvent(product, product.nextVersion(), ProductEvent.EventType.DELETED);
 
         // Transactionally save event intent to the outbox table
         saveOutboxEvent(product.getId().toString(), "ProductDeleted", event);
 
         productRepository.delete(product);
+    }
+
+    private ProductEvent buildEvent(Product product, long version, ProductEvent.EventType type) {
+        return ProductEvent.builder()
+                .schemaVersion(1)
+                .eventId(UUID.randomUUID())
+                .version(version)
+                .productId(product.getId())
+                .sku(product.getSku())
+                .name(product.getName())
+                .description(product.getDescription())
+                .price(product.getPrice())
+                .stockQuantity(product.getStockQuantity())
+                .eventType(type)
+                .timestamp(LocalDateTime.now())
+                .build();
     }
 
     /**
