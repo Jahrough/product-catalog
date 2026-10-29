@@ -8,6 +8,8 @@
         </encoder>
     </appender>
 
+    <logger name="org.springframework.test.context.cache" level="DEBUG"/>
+
     <root level="WARN">
         <appender-ref ref="CONSOLE"/>
     </root>
