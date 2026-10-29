@@ -64,7 +64,7 @@ class ProductServiceTest {
                 .description("Multiport adapter")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
-                .version(0L)
+                .version(1)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -105,7 +105,7 @@ class ProductServiceTest {
                 .name("USB-C Hub")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
-                .version(0L)
+                .version(1)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -179,7 +179,7 @@ class ProductServiceTest {
                 .description(requestDto.getDescription())
                 .price(requestDto.getPrice())
                 .stockQuantity(requestDto.getStockQuantity())
-                .version(0L)
+                .version(1)
                 .build();
 
         ProductResponseDto responseDto = ProductResponseDto.builder()
@@ -228,11 +228,11 @@ class ProductServiceTest {
                 .name("USB-C Hub")
                 .price(BigDecimal.valueOf(49.99))
                 .stockQuantity(100)
-                .version(0L)
+                .version(1)
                 .build();
 
         // Stub repository, object mapper, and outbox repository behaviors
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdForUpdate(productId)).thenReturn(Optional.of(product));
         doNothing().when(productRepository).delete(product);
         when(objectMapper.writeValueAsString(any())).thenReturn("{\"eventId\":\"456-def\"}");
         when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(new OutboxEvent());
@@ -241,7 +241,7 @@ class ProductServiceTest {
         productService.deleteProduct(productId);
 
         // Assert: Verify that the product was found, explicitly deleted, and an outbox event was logged
-        verify(productRepository, times(1)).findById(productId);
+        verify(productRepository, times(1)).findByIdForUpdate(productId);
         verify(productRepository, times(1)).delete(product);
         verify(objectMapper, times(1)).writeValueAsString(any());
         verify(outboxRepository, times(1)).save(any(OutboxEvent.class));

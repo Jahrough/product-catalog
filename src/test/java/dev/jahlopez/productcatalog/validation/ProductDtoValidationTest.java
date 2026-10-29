@@ -54,18 +54,51 @@ class ProductDtoValidationTest {
         }
 
         @Test
-        @DisplayName("Should pass validation when optional description and stockQuantity are null")
-        void shouldPassWhenOptionalFieldsAreNull() {
+        @DisplayName("Should pass validation when the optional description is null")
+        void shouldPassWhenDescriptionIsNull() {
             ProductRequestDto dto = new ProductRequestDto();
             dto.setSku("PROD-HUB-002");
             dto.setName("Wireless Ergonomic Mouse");
             dto.setPrice(new BigDecimal("29.99"));
             dto.setDescription(null);
-            dto.setStockQuantity(null);
+            dto.setStockQuantity(0);
 
             Set<ConstraintViolation<ProductRequestDto>> violations = validator.validate(dto);
 
             assertThat(violations).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Stock Quantity Constraint Tests")
+    class StockQuantityConstraintTests {
+
+        @Test
+        @DisplayName("Should fail validation when stock quantity is null")
+        void shouldFailWhenStockQuantityIsNull() {
+            ProductRequestDto dto = createValidDto();
+            dto.setStockQuantity(null);
+
+            Set<ConstraintViolation<ProductRequestDto>> violations = validator.validate(dto);
+
+            assertThat(violations)
+                    .hasSize(1)
+                    .anyMatch(v -> v.getPropertyPath().toString().equals("stockQuantity")
+                            && v.getMessage().equals("Stock quantity is required"));
+        }
+
+        @Test
+        @DisplayName("Should fail validation when stock quantity is negative")
+        void shouldFailWhenStockQuantityIsNegative() {
+            ProductRequestDto dto = createValidDto();
+            dto.setStockQuantity(-1);
+
+            Set<ConstraintViolation<ProductRequestDto>> violations = validator.validate(dto);
+
+            assertThat(violations)
+                    .hasSize(1)
+                    .anyMatch(v -> v.getPropertyPath().toString().equals("stockQuantity")
+                            && v.getMessage().equals("Stock quantity must be zero or greater"));
         }
     }
 

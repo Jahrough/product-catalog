@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -23,6 +24,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -119,6 +121,76 @@ class ProductControllerTest {
         mockMvc.perform(post(PRODUCTS_URL)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"));
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void updateProduct_withValidData_shouldReturnUpdatedProductAndVersion() throws Exception {
+        ProductRequestDto request = validProductRequest();
+        ProductResponseDto response = ProductResponseDto.builder()
+                .id(PRODUCT_ID)
+                .sku(request.getSku())
+                .name(request.getName())
+                .description(request.getDescription())
+                .price(request.getPrice())
+                .stockQuantity(request.getStockQuantity())
+                .version(2L)
+                .build();
+        when(productService.updateProduct(eq(PRODUCT_ID), any(ProductRequestDto.class))).thenReturn(response);
+
+        mockMvc.perform(put(PRODUCTS_URL + "/{id}", PRODUCT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(PRODUCT_ID))
+                .andExpect(jsonPath("$.sku").value(request.getSku()))
+                .andExpect(jsonPath("$.version").value(2));
+
+        verify(productService).updateProduct(eq(PRODUCT_ID), any(ProductRequestDto.class));
+    }
+
+    @Test
+    void updateProduct_whenMissing_shouldReturnNotFound() throws Exception {
+        when(productService.updateProduct(eq(MISSING_PRODUCT_ID), any(ProductRequestDto.class)))
+                .thenThrow(new ProductNotFoundException(
+                        "Product not found with id: " + MISSING_PRODUCT_ID));
+
+        mockMvc.perform(put(PRODUCTS_URL + "/{id}", MISSING_PRODUCT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validProductRequest())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void updateProduct_withNegativeStockQuantity_shouldReturnBadRequest() throws Exception {
+        ProductRequestDto request = validProductRequest();
+        request.setStockQuantity(-1);
+
+        mockMvc.perform(put(PRODUCTS_URL + "/{id}", PRODUCT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"));
+
+        verifyNoInteractions(productService);
+    }
+
+    @Test
+    void updateProduct_withMissingStockQuantity_shouldReturnBadRequest() throws Exception {
+        String request = """
+                {"sku":"PROD-MOUSE-001","name":"Ergonomic Mouse","price":79.99}
+                """;
+
+        mockMvc.perform(put(PRODUCTS_URL + "/{id}", PRODUCT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST_PAYLOAD"));

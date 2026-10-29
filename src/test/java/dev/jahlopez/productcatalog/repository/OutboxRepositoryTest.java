@@ -58,7 +58,7 @@ class OutboxRepositoryTest {
                 .aggregateType("product")
                 .aggregateId("123")
                 .eventType("ProductCreated")
-                .payload("{\"eventId\":\"test-uuid\",\"sku\":\"PROD-TEST-01\"}")
+                .payload("{\"eventId\":\"test-uuid\",\"sku\":\"PROD-TEST-01\",\"version\":1}")
                 .processed(false)
                 .createdAt(LocalDateTime.now())
                 .build();
