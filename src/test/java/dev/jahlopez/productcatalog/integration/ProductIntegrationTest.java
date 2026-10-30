@@ -1,6 +1,5 @@
 package dev.jahlopez.productcatalog.integration;
 
-import com.redis.testcontainers.RedisContainer;
 import dev.jahlopez.productcatalog.dto.ProductRequestDto;
 import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.model.Product;
@@ -11,16 +10,8 @@ import dev.jahlopez.productcatalog.service.ProductService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,54 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * instances, enabling integration tests against real infrastructure dependencies.
  * Verifies database persistence, Flyway migrations, Redis caching, and Transactional Outbox event logging behavior.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class ProductIntegrationTest {
-
-    // 💡 Environment-agnostic Docker socket discovery fallback for macOS / Linux
-    static {
-        if (System.getenv("DOCKER_HOST") == null) {
-            java.io.File standardSocket = new java.io.File("/var/run/docker.sock");
-            java.io.File desktopSocket = new java.io.File(System.getProperty("user.home") + "/.docker/run/docker.sock");
-
-            if (desktopSocket.exists()) {
-                System.setProperty("docker.host", "unix://" + desktopSocket.getAbsolutePath());
-            } else if (standardSocket.exists()) {
-                System.setProperty("docker.host", "unix:///var/run/docker.sock");
-            }
-        }
-    }
-
-    /** Isolated PostgreSQL container instance for integration testing. */
-    @Container
-    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:15-alpine")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
-
-    /**
-     * Isolated Redis container for caching and distributed data tier testing.
-     */
-    @Container
-    static final RedisContainer redis = new RedisContainer(DockerImageName.parse("redis:7-alpine"));
-
-    /**
-     * Dynamically registers Spring Boot datasource and Redis properties
-     * from the active Testcontainers instances.
-     *
-     * @param registry the dynamic property registry provided by Spring Test framework
-     */
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.flyway.enabled", () -> true);
-
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
+class ProductIntegrationTest extends PostgresRedisIntegrationTestSupport {
 
     @Autowired
     private ProductRepository productRepository;
@@ -173,7 +117,7 @@ class ProductIntegrationTest {
         // Verify outbox event was created atomically alongside the product
         List<OutboxEvent> outboxEvents = outboxRepository.findAll();
         assertThat(outboxEvents).hasSize(1);
-        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("CREATED");
+        assertThat(outboxEvents.get(0).getEventType()).isEqualTo("ProductCreated");
 
         // Inspect Redis cache instance directly to verify caching mechanism
         Cache productCache = cacheManager.getCache("productsById");

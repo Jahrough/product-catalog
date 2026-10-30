@@ -11,8 +11,8 @@ import java.time.LocalDateTime;
 
 /**
  * Represents the persistent Product domain entity mapped to the {@code products} table
- * in the relational database. Utilizes JPA annotations for ORM mapping, auditing listeners,
- * optimistic locking versioning, and explicit equals/hashCode boundaries for high-performance entity management.
+ * in the relational database. JPA auditing populates its timestamps, while the
+ * service layer serializes aggregate version changes with pessimistic row locks.
  */
 @Entity
 @Table(
@@ -74,12 +74,40 @@ public class Product {
     private Integer stockQuantity;
 
     /**
-     * Optimistic locking version field to prevent concurrent modification anomalies
-     * and provide version metadata for downstream anti-stale event guards.
+     * Monotonic aggregate version. Starts at {@link #INITIAL_VERSION} on creation and is incremented
+     * by exactly one on every update and delete, providing ordering metadata for downstream stale-event guards.
+     * Concurrent writers are serialized with a pessimistic lock in the service layer.
      */
-    @Version
     @Column(nullable = false)
-    private Long version;
+    private Integer version;
+
+    public static final int INITIAL_VERSION = 1;
+
+    @PrePersist
+    void initVersion() {
+        if (this.version == null) {
+            this.version = INITIAL_VERSION;
+        }
+    }
+
+    /**
+     * Advances the aggregate version by one and returns the new value.
+     *
+     * @return the incremented aggregate version
+     */
+    public int incrementVersion() {
+        this.version = Math.incrementExact(this.version == null ? INITIAL_VERSION : this.version);
+        return this.version;
+    }
+
+    /**
+     * Returns the next event version without changing the deleted aggregate.
+     *
+     * @return the version to assign to the deletion event
+     */
+    public long nextVersion() {
+        return (long) (this.version == null ? INITIAL_VERSION : this.version) + 1;
+    }
 
     /**
      * Timestamp indicating when the product entity was initially created.

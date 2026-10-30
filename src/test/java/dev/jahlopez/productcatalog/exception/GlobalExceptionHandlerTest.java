@@ -92,7 +92,8 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/test/products/1"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.status").value(500))
-                .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"));
+                .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.message").value("An unexpected error occurred."));
     }
 
     @RestController

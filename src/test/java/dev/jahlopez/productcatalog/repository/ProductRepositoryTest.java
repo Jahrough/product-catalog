@@ -8,12 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 
@@ -31,51 +25,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The auditing configuration is imported explicitly because a JPA slice test
  * does not necessarily load the full application configuration.</p>
  */
-@Testcontainers(disabledWithoutDocker = true)
 @DataJpaTest
-@ActiveProfiles("test")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(JpaAuditingConfig.class)
-class ProductRepositoryTest {
+class ProductRepositoryTest extends PostgresRepositoryTestSupport {
 
     private static final String EXISTING_SKU = "PROD-TEST-001";
     private static final String MISSING_SKU = "NON-EXISTENT-SKU";
     private static final String PRODUCT_NAME = "Test Mechanical Keyboard";
     private static final BigDecimal PRODUCT_PRICE = new BigDecimal("99.99");
-
-    /**
-     * PostgreSQL instance shared by the tests in this class.
-     *
-     * <p>Testcontainers manages the container lifecycle, isolating these tests
-     * from any PostgreSQL instance running directly on the developer's machine.</p>
-     */
-    @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:15-alpine")
-                    .withDatabaseName("product_catalog_test")
-                    .withUsername("test")
-                    .withPassword("test");
-
-    /**
-     * Registers the PostgreSQL container's connection settings with Spring.
-     *
-     * <p>The JDBC URL includes the dynamically mapped host port, so the tests
-     * do not depend on a fixed local PostgreSQL port.</p>
-     *
-     * @param registry registry for dynamically supplied Spring properties
-     */
-    @DynamicPropertySource
-    static void configureDatabase(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
-
-        // Explicitly configure Flyway to use the same PostgreSQL container.
-        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.flyway.user", POSTGRES::getUsername);
-        registry.add("spring.flyway.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.driver-class-name", () -> "org.postgresql.Driver");
-    }
 
     /** JPA test utility for persisting entities and flushing changes. */
     @Autowired

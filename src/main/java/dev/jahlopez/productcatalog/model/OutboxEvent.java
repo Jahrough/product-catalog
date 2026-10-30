@@ -14,10 +14,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
- * Entity representing an outbox event stored transactionally in PostgreSQL
- * to support reliable, decoupled event publishing via Debezium CDC or an outbox poller.
+ * Entity representing an event intent stored in PostgreSQL in the same
+ * transaction as its product change. A separate publisher or CDC connector
+ * is required to deliver the event to downstream systems.
  */
 @Entity
 @Table(name = "outbox")
@@ -32,17 +34,24 @@ public class OutboxEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String aggregateType; // e.g., "PRODUCT"
+    @Column(name = "event_id", nullable = false, unique = true, updatable = false)
+    private UUID eventId;
 
     @Column(nullable = false)
-    private String aggregateId;   // e.g., Product ID or SKU
+    private String aggregateType;
 
     @Column(nullable = false)
-    private String eventType;     // e.g., "CREATED", "DELETED"
+    private String aggregateId;
+
+    @Column(nullable = false)
+    private String eventType;
 
     @Column(columnDefinition = "TEXT", nullable = false)
-    private String payload;       // JSON string of the event payload
+    private String payload;
+
+    @Column(name = "schema_version", nullable = false)
+    @Builder.Default
+    private Integer schemaVersion = 1;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;

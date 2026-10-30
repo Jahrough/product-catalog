@@ -5,7 +5,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -52,16 +54,16 @@ public class GlobalExceptionHandler {
 
         log.warn("Validation failed for request path [{}]: {} field errors detected", request.getRequestURI(), validationErrors.size());
 
-        ApiErrorResponse errorResponse = ApiErrorResponse.builder()
-                .timestamp(Instant.now())
-                .status(HttpStatus.BAD_REQUEST.value())
-                .errorCode("INVALID_REQUEST_PAYLOAD")
-                .message("Validation failed for one or more fields.")
-                .path(request.getRequestURI())
-                .validationErrors(validationErrors)
-                .build();
+        return badRequest(request, "Validation failed for one or more fields.", validationErrors);
+    }
 
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    /**
+     * Handles malformed JSON and request values that cannot be converted to the expected type.
+     */
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ApiErrorResponse> handleUnreadableRequest(
+            Exception ex, HttpServletRequest request) {
+        return badRequest(request, "The request contains a malformed body or invalid parameter.", null);
     }
 
     /**
@@ -77,10 +79,26 @@ public class GlobalExceptionHandler {
                 .timestamp(Instant.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .errorCode("INTERNAL_SERVER_ERROR")
-                .message("An unexpected error occurred: " + ex.getMessage())
+                .message("An unexpected error occurred.")
                 .path(request.getRequestURI())
                 .build();
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private ResponseEntity<ApiErrorResponse> badRequest(
+            HttpServletRequest request,
+            String message,
+            List<ApiErrorResponse.ValidationError> validationErrors) {
+        ApiErrorResponse errorResponse = ApiErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .errorCode("INVALID_REQUEST_PAYLOAD")
+                .message(message)
+                .path(request.getRequestURI())
+                .validationErrors(validationErrors)
+                .build();
+
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 }

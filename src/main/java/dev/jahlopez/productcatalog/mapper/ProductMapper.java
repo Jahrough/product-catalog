@@ -5,6 +5,7 @@ import dev.jahlopez.productcatalog.dto.ProductResponseDto;
 import dev.jahlopez.productcatalog.model.Product;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.InjectionStrategy;
 
@@ -39,5 +40,15 @@ public interface ProductMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "version", ignore = true)
     Product toEntity(ProductRequestDto requestDto);
+
+    /**
+     * Copies mutable request fields onto an existing entity, leaving identity, version and audit fields untouched.
+     */
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "version", ignore = true)
+    void updateEntity(ProductRequestDto requestDto, @MappingTarget Product product);
 }

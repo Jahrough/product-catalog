@@ -9,7 +9,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +19,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * REST controller exposing production-grade endpoints for managing the product catalog.
- * Implements clean OpenAPI 3 documentation via custom meta-annotations, request validation,
- * standardized error responses, and global security requirements.
+ * REST controller exposing product catalog endpoints with request validation
+ * and OpenAPI documentation.
  */
 @RestController
 @RequestMapping("/api/v1/products")
@@ -31,7 +29,6 @@ import java.util.List;
         name = "Product Catalog API",
         description = "High-performance microservice endpoints for managing product catalog data, pricing, inventory, and SKU lookups."
 )
-@SecurityRequirement(name = "BearerAuth") // Binds the OpenApiConfig JWT security scheme to controller endpoints
 public class ProductController {
 
     private final ProductService productService;
@@ -56,6 +53,29 @@ public class ProductController {
     public ResponseEntity<ProductResponseDto> createProduct(@Valid @RequestBody ProductRequestDto requestDto) {
         ProductResponseDto createdProduct = productService.createProduct(requestDto);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdProduct);
+    }
+
+    /**
+     * Updates an existing product and emits a ProductUpdated event with an incremented version.
+     *
+     * @param id         the product primary key ID
+     * @param requestDto the new product state
+     * @return the updated product response DTO
+     */
+    @Operation(
+            summary = "Update a product",
+            description = "Replaces product details, increments the aggregate version and evicts product cache entries."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "Product successfully updated",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ProductResponseDto.class))
+    )
+    @ApiWriteResponses
+    @PutMapping("/{id}")
+    public ResponseEntity<ProductResponseDto> updateProduct(@PathVariable Long id,
+                                                            @Valid @RequestBody ProductRequestDto requestDto) {
+        return ResponseEntity.ok(productService.updateProduct(id, requestDto));
     }
 
     /**

@@ -19,6 +19,7 @@ val springdocVersion = "3.2.0"
 val logstashEncoderVersion = "9.0"
 val testcontainersVersion = "2.0.5"
 val testcontainersRedisVersion = "2.2.4"
+val mockitoAgent = configurations.create("mockitoAgent")
 
 repositories {
     mavenCentral()
@@ -75,6 +76,9 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter:$testcontainersVersion")
     testImplementation("org.testcontainers:testcontainers-postgresql:$testcontainersVersion")
     testImplementation("com.redis:testcontainers-redis:$testcontainersRedisVersion")
+    mockitoAgent("org.mockito:mockito-core") {
+        isTransitive = false
+    }
 }
 
 jacoco {
@@ -98,6 +102,8 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    // Mockito's agent appends bootstrap classes; disable CDS to avoid its JVM startup warning.
+    jvmArgs("-Xshare:off", "-javaagent:${mockitoAgent.singleFile}")
     finalizedBy(tasks.jacocoTestReport) // Automatically generate coverage report after tests run
 }
 

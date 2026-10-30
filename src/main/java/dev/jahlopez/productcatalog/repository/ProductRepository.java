@@ -1,7 +1,11 @@
 package dev.jahlopez.productcatalog.repository;
 
 import dev.jahlopez.productcatalog.model.Product;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -20,6 +24,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * @return an Optional containing the found product, or empty if not found
      */
     Optional<Product> findBySku(String sku);
+
+    /**
+     * Loads a product with a pessimistic write lock so version increments are serialized per row.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Check if a product already exists with the given SKU.
