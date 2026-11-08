@@ -308,15 +308,21 @@ The configured Actuator web endpoints include health, info, and Prometheus. With
 ```mermaid
 flowchart LR
     app[Product Catalog Service]
-    app --> act[Actuator endpoints<br/>health, liveness, readiness, prometheus]
-    app -. OTLP traces, sampling 0.1 .-> otlp[[OTLP collector]]
-    act -. requires a configured scraper .-> prom[[Prometheus]]
+    act[Actuator endpoints<br/>health, liveness, readiness, Prometheus]
+    endpoint[Configured OTLP endpoint<br/>default: localhost:4318/v1/traces]
+    app --> act
+    app -. exports sampled traces .-> endpoint
+    prom[[Prometheus scraper]] -. scrapes .-> act
+    endpoint -. collector/backend availability<br/>not verified here .-> otel[[OTLP collector and trace backend<br/>not provisioned here]]
 
     classDef external stroke-dasharray: 5 5,stroke:#999,color:#777
-    class otlp,prom external
+    class prom,otel external
 ```
 
-Dashed components are not provided or verified by this repository.
+Dashed components represent external integrations that this repository does
+not provision or verify. Prometheus must scrape the Actuator endpoint; the
+application's OTLP endpoint must be reachable and backed by a collector for
+trace export to work.
 
 ## Docker and CI
 
