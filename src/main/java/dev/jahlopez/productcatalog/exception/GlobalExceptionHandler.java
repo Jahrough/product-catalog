@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Maps Catalog API exceptions to the service's structured HTTP error responses.
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {

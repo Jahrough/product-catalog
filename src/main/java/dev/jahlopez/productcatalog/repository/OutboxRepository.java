@@ -14,11 +14,12 @@ import java.util.List;
 public interface OutboxRepository extends JpaRepository<OutboxEvent, Long> {
 
     /**
-     * Finds all outbox events that have not yet been processed or published.
-     * Useful if implementing a scheduled outbox publisher poller.
+     * Finds outbox rows by their {@code processed} flag. The current CDC path publishes
+     * from inserted rows and does not use this flag as a delivery acknowledgment; a query
+     * result therefore does not establish whether an event reached Kafka.
      *
-     * @param processed publication status flag
-     * @return list of unprocessed outbox events
+     * @param processed the value to match in the persisted flag
+     * @return outbox rows whose flag matches {@code processed}
      */
     List<OutboxEvent> findByProcessed(boolean processed);
 }

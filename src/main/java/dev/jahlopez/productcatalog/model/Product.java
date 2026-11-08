@@ -74,9 +74,11 @@ public class Product {
     private Integer stockQuantity;
 
     /**
-     * Monotonic aggregate version. Starts at {@link #INITIAL_VERSION} on creation and is incremented
-     * by exactly one on every update and delete, providing ordering metadata for downstream stale-event guards.
-     * Concurrent writers are serialized with a pessimistic lock in the service layer.
+     * Monotonic aggregate version. Starts at {@link #INITIAL_VERSION} on creation and is
+     * incremented on updates, providing ordering metadata for downstream stale-event guards.
+     * A deletion event uses {@link #nextVersion()} before this row is physically deleted; the
+     * deleted entity's version is not persisted as a durable tombstone. Concurrent writers are
+     * serialized with a pessimistic lock in the service layer.
      */
     @Column(nullable = false)
     private Integer version;

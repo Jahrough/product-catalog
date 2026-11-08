@@ -140,7 +140,7 @@ public class ProductService {
         Product product = productRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ProductNotFoundException("Product not found with id: " + id));
 
-        // Tombstone: the delete event carries current version + 1 so consumers can order it after all prior events
+        // The deletion event carries the next version; the product row is still physically deleted below.
         ProductEvent event = buildEvent(product, product.nextVersion(), ProductEvent.EventType.DELETED);
 
         // Transactionally save event intent to the outbox table

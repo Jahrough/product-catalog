@@ -9,6 +9,9 @@ import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Error payload returned by the Catalog API, with optional field-level validation details.
+ */
 @Data
 @Builder
 @NoArgsConstructor

@@ -56,7 +56,8 @@ public class ProductController {
     }
 
     /**
-     * Updates an existing product and emits a ProductUpdated event with an incremented version.
+     * Updates an existing product; the service persists the matching versioned event intent
+     * to the outbox in the same database transaction.
      *
      * @param id         the product primary key ID
      * @param requestDto the new product state

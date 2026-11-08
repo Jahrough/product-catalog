@@ -6,11 +6,13 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Immutable data record representing a product lifecycle event (e.g., created, updated, deleted)
- * that is transactionally logged to the outbox table for reliable downstream event streaming,
- * complete with idempotency and versioning metadata.
+ * Immutable product lifecycle payload stored in the Catalog outbox alongside a product mutation.
+ * {@code eventId} identifies this event, while {@code productId} and {@code version} identify
+ * the product state and its ordering metadata. Persisting this record does not itself publish it
+ * to Kafka or guarantee downstream delivery; the outbox row and CDC connector provide that path.
  *
- * Uses Lombok's @Builder annotation to allow convenient and readable object creation.
+ * The Catalog currently builds the payload from the product's complete state, rather than a
+ * partial change set.
  */
 @Builder
 public record ProductEvent(
