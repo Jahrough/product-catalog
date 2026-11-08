@@ -6,15 +6,21 @@ The outbox records are persisted but are **not currently published** to Kafka or
 
 ## Architecture
 
-```text
-HTTP client
-    |
-    v
-ProductController -> ProductService -> ProductRepository -> PostgreSQL
-                            |                 Flyway migrations
-                            +---------------> OutboxRepository -> outbox table
-                            |
-                            +---------------> Redis caches (read operations)
+```mermaid
+flowchart TD
+    Client["HTTP client"] --> Controller["ProductController"]
+    Controller --> Service["ProductService<br/>(transaction boundary, versioning,<br/>cache eviction)"]
+    Service --> ProductRepo["ProductRepository"]
+    Service --> OutboxRepo["OutboxRepository"]
+    ProductRepo --> PG[("PostgreSQL<br/>products table")]
+    OutboxRepo --> OutboxTbl[("PostgreSQL<br/>outbox table")]
+    Flyway["Flyway migrations<br/>V1, V2"] -.-> PG
+    Flyway -.-> OutboxTbl
+    Service -.->|"read caching / write eviction"| Redis[("Redis caches<br/>productsById, productsBySku, productsList")]
+    OutboxTbl -.->|"NOT IMPLEMENTED<br/>polling publisher or CDC"| Broker["Kafka / broker"]
+
+    classDef missing stroke-dasharray: 5 5
+    class Broker missing
 ```
 
 `ProductController` maps HTTP requests to service operations and DTOs. `ProductService` owns transaction boundaries, product version changes, cache eviction, and atomic persistence of product changes with outbox records. PostgreSQL is the source of truth; Redis is a cache, not a persistence substitute. No authentication or authorization implementation is included.
